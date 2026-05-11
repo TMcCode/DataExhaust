@@ -27,8 +27,11 @@ Notebook::
 
 from __future__ import annotations
 
+import io
+import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
@@ -36,6 +39,7 @@ import pandas as pd
 import analytic_panel
 
 _GDELT_DEFAULT_LONG_CSV = "data/gdelt_fast_casual_monthly_long.csv"
+_GDELT_LONG_ENV_VAR = "MLP_GDELT_LONG_CSV"
 _GDELT_MONTHLY_PREFIX = "gdelt_m_"
 _GDELT_QUARTER_PREFIX = "gdelt_cq_"
 
@@ -44,16 +48,70 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parent
 
 
+def _read_csv_from_gcs(gs_uri: str) -> pd.DataFrame:
+    try:
+        from google.cloud import storage
+        from google.oauth2.service_account import Credentials
+    except ImportError:
+        return pd.DataFrame()
+
+    p = urlparse(str(gs_uri).strip())
+    if p.scheme != "gs":
+        return pd.DataFrame()
+    bucket_name = (p.netloc or "").strip()
+    blob_path = (p.path or "").lstrip("/")
+    if not bucket_name:
+        return pd.DataFrame()
+    try:
+        key = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") or os.environ.get(
+            "GOOGLE_SHEETS_CREDENTIALS"
+        )
+        if key and Path(key).is_file():
+            creds = Credentials.from_service_account_file(
+                str(key),
+                scopes=("https://www.googleapis.com/auth/devstorage.read_only",),
+            )
+            client = storage.Client(credentials=creds, project=creds.project_id)
+        else:
+            client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
+        if not blob.exists():
+            return pd.DataFrame()
+        return pd.read_csv(io.BytesIO(blob.download_as_bytes()))
+    except Exception:
+        return pd.DataFrame()
+
+
+def _read_csv_any(uri_or_path: str) -> pd.DataFrame:
+    s = str(uri_or_path).strip()
+    if not s:
+        return pd.DataFrame()
+    if s.startswith("gs://"):
+        return _read_csv_from_gcs(s)
+    p = Path(s).expanduser()
+    if not p.is_file():
+        return pd.DataFrame()
+    return pd.read_csv(p)
+
+
 def load_gdelt_monthly_long(path: str | Path | None = None) -> pd.DataFrame:
     """Load brand-month GDELT metrics keyed by ``Ticker`` and calendar month-end.
 
-    Returns an empty frame if the CSV is missing. Expected source is
-    ``data/gdelt_fast_casual_monthly_long.csv`` from :mod:`gdelt_monthly_brands`.
+    Source resolution order: explicit ``path`` arg > ``MLP_GDELT_LONG_CSV`` env var
+    (local path or ``gs://...`` URI) > ``data/gdelt_fast_casual_monthly_long.csv`` next
+    to this module. Returns an empty frame when none are reachable.
     """
-    p = Path(path).expanduser() if path else _repo_root() / _GDELT_DEFAULT_LONG_CSV
-    if not p.is_file():
+    if path is not None and str(path).strip():
+        raw = _read_csv_any(str(path).strip())
+    else:
+        env_uri = os.environ.get(_GDELT_LONG_ENV_VAR, "").strip()
+        if env_uri:
+            raw = _read_csv_any(env_uri)
+        else:
+            raw = _read_csv_any(str(_repo_root() / _GDELT_DEFAULT_LONG_CSV))
+    if raw.empty:
         return pd.DataFrame()
-    raw = pd.read_csv(p)
     required = {"month", "ticker"}
     if not required.issubset(raw.columns):
         return pd.DataFrame()
