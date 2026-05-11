@@ -12,6 +12,7 @@ re-running the fiscal×macro wide merge when they do not need ``feature_tables``
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -24,6 +25,14 @@ import sheets_client
 
 # Dashboard default: enough history for ~15y charts without pulling full FRED history from 2000.
 _STREAMLIT_DEFAULT_MACRO_START = "2010-01-01"
+
+# Local snapshot bundle shipped with the repo (offline-dev / zero-credential fallback).
+# Same gzip+pickle shape as the GCS snapshot; refreshed by
+# `python load_mlp_master.py --gcs-snapshot-uri ... && python scripts/download_snapshot.py`
+# (or simply copying from GCS). Loaded after GCS but before live API fall-through.
+_LOCAL_SNAPSHOT_PATH = (
+    Path(__file__).resolve().parent.parent / "data" / "snapshots" / "mlp_dashboard_bundle.pkl.gz"
+)
 
 
 def _gcs_snapshot_uri() -> str | None:
@@ -38,6 +47,15 @@ def _gcs_snapshot_uri() -> str | None:
     except Exception:
         pass
     return None
+
+
+def _try_local_snapshot() -> dict[str, Any] | None:
+    """Return the repo-bundled snapshot if present, else ``None``.
+
+    Lets ``streamlit run app.py`` work with zero credentials by serving the frozen
+    bundle in ``data/snapshots/`` when neither GCS nor live APIs are reachable.
+    """
+    return mlp_gcs_snapshot.load_bundle_from_local_path(_LOCAL_SNAPSHOT_PATH)
 
 
 @st.cache_data(ttl=3600, show_spinner="Loading Google Sheets workbook…")
@@ -73,6 +91,16 @@ def _cached_feature_tables(
     return feature_panel.build_macro_joined_panels(wide, dfs["fiscal_dates"], macro)
 
 
+def _strip_feature_tables_if_unwanted(
+    snap: dict[str, Any], include_feature_tables: bool
+) -> dict[str, Any]:
+    if include_feature_tables:
+        return snap
+    out = dict(snap)
+    out["feature_tables"] = {}
+    return out
+
+
 def load_dashboard_data(
     spreadsheet_id_blank_means_default: str | None,
     macro_observation_start: str,
@@ -83,20 +111,26 @@ def load_dashboard_data(
 ) -> dict[str, Any]:
     """Return workbook + macro + wide panel; optionally the fiscal×macro joined tables.
 
-    If ``gcs_snapshot_uri`` is set (``gs://bucket/path.pkl.gz``), try loading that gzip+pickle bundle
-    first (fast on hosted runs); on failure falls back to live Sheets + FRED.
+    Resolution order:
 
-    Sub-loads are cached separately so a page that sets ``include_feature_tables=False`` still warms
-    the workbook/macro caches for other pages.
+    1. **GCS snapshot** — if ``gcs_snapshot_uri`` is set, try downloading the
+       gzip+pickle bundle (fast cold start when credentials are available).
+    2. **Local snapshot** — fall back to ``data/snapshots/mlp_dashboard_bundle.pkl.gz``
+       shipped with the repo so a zero-credential clone still renders the dashboard.
+    3. **Live APIs** — last-resort path that rebuilds the bundle from Sheets + FRED +
+       alt-data CSVs (requires the relevant API keys / service-account JSON).
+
+    Sub-loads in step 3 are cached separately so a page that sets
+    ``include_feature_tables=False`` still warms the workbook/macro caches for other pages.
     """
     if gcs_snapshot_uri and str(gcs_snapshot_uri).strip():
         snap = mlp_gcs_snapshot.download_bundle_gzip_pickle(str(gcs_snapshot_uri).strip())
         if snap is not None:
-            if not include_feature_tables:
-                out = dict(snap)
-                out["feature_tables"] = {}
-                return out
-            return snap
+            return _strip_feature_tables_if_unwanted(snap, include_feature_tables)
+
+    local_snap = _try_local_snapshot()
+    if local_snap is not None:
+        return _strip_feature_tables_if_unwanted(local_snap, include_feature_tables)
 
     sid_key = spreadsheet_id_blank_means_default or ""
     dfs = _cached_mlp_sheets(sid_key)

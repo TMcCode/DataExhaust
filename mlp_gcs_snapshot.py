@@ -81,3 +81,23 @@ def download_bundle_gzip_pickle(gs_uri: str) -> dict[str, Any] | None:
         return None
     except Exception:
         return None
+
+
+def load_bundle_from_local_path(path: str | os.PathLike[str]) -> dict[str, Any] | None:
+    """Read a gzip+pickle bundle from a local file. Returns ``None`` on any failure.
+
+    Used as the offline-dev / zero-credential fallback by
+    :func:`streamlit_dashboard.data_loader.load_dashboard_data`; bundle shape must match
+    what :func:`upload_bundle_gzip_pickle` produced.
+    """
+    p = Path(path).expanduser()
+    if not p.is_file():
+        return None
+    try:
+        with gzip.open(p, "rb") as gz:
+            obj = pickle.load(gz)
+    except Exception:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    return obj
