@@ -1,0 +1,76 @@
+# ============================================================================
+# SECRETS — never commit
+# ============================================================================
+# Google service account JSON keys
+data-exhaust-key.json
+*-key.json
+*service-account*.json
+secrets/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Streamlit local secrets (Streamlit Cloud has its own UI-managed secrets store)
+.streamlit/secrets.toml
+
+# ============================================================================
+# Python
+# ============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================================================
+# Virtual environments
+# ============================================================================
+.venv/
+.venv_packages/
+venv/
+env/
+ENV/
+
+# ============================================================================
+# Tooling caches
+# ============================================================================
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ============================================================================
+# OS / editor
+# ============================================================================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ============================================================================
+# Project-specific caches and large derived data
+# ============================================================================
+# GDELT per-brand daily volume cache (derivable from API)
+data/gdelt_cache/
+
+# OpenTable raw API dump (4.2 MB) and wide YoY pivot (44 MB) — both regenerable
+# via `python opentable_state_industry.py`. The smaller monthly summaries are
+# committed for the dashboard.
+data/opentable_state_of_industry_raw.json
+data/opentable_state_of_industry_yoy.csv
+
+# USDA NASS local fallback cache (derived data)
+.cache/

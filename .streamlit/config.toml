@@ -1,0 +1,8 @@
+# Warm, memo-like defaults; body/heading fonts refined further in theme.py CSS.
+[theme]
+base = "light"
+primaryColor = "#3d5346"
+backgroundColor = "#faf8f5"
+secondaryBackgroundColor = "#f2ede4"
+textColor = "#1f1c19"
+font = "sans serif"
