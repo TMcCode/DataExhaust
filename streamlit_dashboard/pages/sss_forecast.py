@@ -122,7 +122,10 @@ _ROW_STYLE_CLASS = {
 }
 _NOTES: dict[str, str] = {
     "CMG": "- Estimated units entering comp base uses company-owned restaurants open for at least 13 full calendar months; approximated with openings from five quarters earlier.",
-    "CAVA": "- Estimated units entering comp base uses CAVA restaurants open 365 days or longer, including converted Zoes Kitchen locations open 365 days or longer after conversion; approximated with openings from four quarters earlier.",
+    "CAVA": (
+        "- Estimated units entering comp base uses CAVA restaurants open 365 days or longer, including converted Zoes Kitchen locations open 365 days or longer after conversion; approximated with openings from four quarters earlier.\n"
+        "- CAVA reported a 53rd week in fiscal 2023, which inflates 2023 reported revenue but is excluded from SSS calculations."
+    ),
     "BROS": "- BROS has system same-shop sales and the best comparable-base coverage history. Coverage is useful for the dollar bridge but is not itself an SSS percentage.",
     "WING": "- Estimated units entering comp base uses restaurants open for at least 52 full weeks; approximated with openings from four quarters earlier.",
     "SHAK": "- Estimated units entering comp base uses Company-operated Shacks open for 24 full fiscal months or longer; approximated with openings from eight quarters earlier.",
@@ -130,21 +133,22 @@ _NOTES: dict[str, str] = {
 }
 _FORECAST_RATIONALE: dict[str, str] = {
     "CMG": (
-        "CMG forecast logic: a **bullish** read against mgmt's Q2 ~+1% / FY26 roughly flat framing. Traffic "
-        "builds (+0.8% Q2 → +2.0% Q1'27) as value, throughput, and marketing stabilize transactions; menu "
-        "price moderates (1.5% → 1.3%) off the 2024/2025 inflation cycle; product/check mix fades from a "
-        "drag to neutral. Two-year stack normalizes rather than re-accelerating."
-    ),
+        "CMG forecast logic: a **neutral-to-slightly cautious** read against mgmt's Q2 ~+1% / FY26 roughly flat framing. SSS remains muted, "
+        "with price doing most of the work while traffic stays soft through 2026. Traffic is assumed to move from slightly negative in Q2"
+        " to flat by 2027Q1, helped by throughput, marketing, and value messaging, but not enough to signal a clear reacceleration." 
+        " Menu price moderates from 1.5% to 1.3%, while product/check mix remains modestly negative. Two-year stacks remain uneven and pressured," 
+        " especially traffic, so this is stabilization rather than a clean recovery. " 
+
+        ),
     "CAVA": (
         "CAVA forecast logic: a **bullish** read with the model leaning on traffic and mix given FY26's modest "
         "pricing guide. Traffic builds (+1.9% Q1 → +3.5% Q4) on brand momentum and unit maturity against an "
         "easing 2025 compare; menu price stays modest (~1.0% → 0.8%); mix holds steady (~0.9%) from menu, "
-        "digital, and premium attach. Two-year stack elevated but not sharply re-accelerating off strong "
-        "2024/2025 prints."
+        "digital, and premium attach. Room for upside if two-year stacks hold."
     ),
     "BROS": (
         "BROS forecast logic: a **bullish** read built around mgmt's Q3 price roll-off. Traffic builds "
-        "(+1.8% Q2 → +2.6% Q1'27) on awareness and newer-market maturation; menu price steps down 1.5% → 0.5% "
+        "(+1.8% Q2 → +2.6% 2027Q1) on awareness and newer-market maturation; menu price steps down 1.5% → 0.5% "
         "from Q3; mix steps **up** (1.5% → ~2.0–2.3%) as the food rollout reaches the broader company-operated "
         "base, offsetting the price roll-off. **Caveat:** a production model would likely need to separate "
         "**company-operated** vs **franchise** SSS — BROS reports system-wide same-shop, but the company-op "
@@ -1053,10 +1057,10 @@ defensible range vs. recent reporting, and the two-year stack tests whether the 
 than implying a sharp reacceleration off prior-year strength.
 
 Across the group, **BROS** and **CAVA** screened most bullish, with improving traffic, positive mix, and limited
-dependence on pricing. **CMG** is bullish on traffic with mix turning from drag to neutral, though it still leans
-more on price than peers. **SHAK** is constructive, with steady mid-single-digit SSS supported by traffic and a
-continued price contribution. **SG** and **WING** are more mixed, showing weak near-term traffic but a path toward
-H2 stabilization.
+dependence on pricing. **SHAK** is constructive, with steady mid-single-digit SSS supported by traffic and a
+continued price contribution. **CMG** looks more like stabilization than bullish recovery. **SG** and **WING** are more mixed, 
+showing weak near-term traffic but a path toward H2 stabilization.
+
 """
     )
 

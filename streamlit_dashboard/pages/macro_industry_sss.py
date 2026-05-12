@@ -1391,9 +1391,9 @@ visits in a more selective environment, especially after several years of price-
 ### Fast casual brands that capture consumer attention should see opportunity
 
 To frame which brands are still earning consumer attention, 
-GDELT news / media attention was compared across the six fast casual names on the left and Google Trends interest on the right.
-Together, those views should help separate brands that are waiting for the category to improve from brands
-that are actively staying top-of-mind with consumers. Paid data can be much more helpful, but these free sources are a useful check.
+I compared GDELT media attention and Google Trends search interest across the six fast casual names.
+Though very noisy, these datasets can provide a view into which brands are earning consumer attention.
+Paid data is much more helpful, but these free sources are a useful check.
 """
     )
 
@@ -1476,10 +1476,8 @@ that are actively staying top-of-mind with consumers. Paid data can be much more
 
     st.markdown(
         """
-The clearest takeaway is that **CAVA is the positive outlier**. GDELT is event-driven, so media coverage can spike
-around earnings, executive news, menu launches, controversies, or expansion headlines; Google Trends is the cleaner
-read on sustained consumer pull. On that measure, CAVA has held the strongest and most persistent search-interest
-growth in the current brand set, while the other available brands look more muted. This suggests CAVA is still earning incremental
+The clearest takeaway is that **CAVA** is the positive outlier. **CAVA** has held the strongest and most persistent search-interest / media attention
+growth in the current brand set, while the other available brands look more muted. This suggests the brand is still earning incremental
 consumer mindshare.
 """
     )
