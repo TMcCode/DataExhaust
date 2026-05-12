@@ -240,13 +240,27 @@ def load_bls_ces_monthly_dataframe(
     for sid, col in zip(series_ids, col_names):
         d = by_series[sid]
         if not d:
-            pieces[col] = pd.Series(dtype="float64", name=col)
+            # Empty series still carry a DatetimeIndex so the assembled frame
+            # below keeps a DatetimeIndex even when *every* series came back
+            # empty (BLS outage / throttling / bad registration key). Without
+            # this, ``out.index`` falls back to a RangeIndex and the
+            # downstream ``.normalize()`` call raises AttributeError.
+            pieces[col] = pd.Series(
+                dtype="float64",
+                index=pd.DatetimeIndex([], name="month_end"),
+                name=col,
+            )
             continue
         idx = sorted(d.keys())
         pieces[col] = pd.Series([d[t] for t in idx], index=pd.DatetimeIndex(idx), name=col)
 
     out = pd.DataFrame(pieces).sort_index()
-    out.index = out.index.normalize()
+    # Guard for completeness: if the assembled index is somehow not a
+    # DatetimeIndex (e.g. all series empty in older pandas builds), skip the
+    # normalize step rather than crash — downstream code already tolerates
+    # an empty BLS frame.
+    if isinstance(out.index, pd.DatetimeIndex):
+        out.index = out.index.normalize()
     out.index.name = "month_end"
     return out
 
