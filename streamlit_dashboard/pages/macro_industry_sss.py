@@ -1076,7 +1076,7 @@ div[data-testid="stMarkdownContainer"] h1 + h2 {
     )
     st.markdown(
         """
-Fast casual SSS has moved from reopening / inflation-aided growth into outright fatigue. The fast casual SSS
+Fast casual SSS has moved from reopening / inflation-aided growth into straight up fatigue. The fast casual SSS
 average was **-1.6%** in **2026Q1**, the weakest point in the available dashboard history (since **2021Q1**) and
 the **8th** straight quarter of deterioration. While traffic had held up through price increases in **2023** and
 **2024**, it softened in **2025**.
@@ -1315,7 +1315,7 @@ is still a useful check that away-from-home spending has not collapsed after adj
 inflation. Worker pay is also still growing faster than headline CPI, giving consumers some offset to higher menu
 prices. Unemployment has ticked up, but remains below recessionary levels, while commuter activity in New York and
 San Francisco continues to recover from the post-COVID trough. The consumer is not uniformly strong, but the data
-does not point to a broad pullback from away-from-home spending.
+does not point to a broad pullback in away-from-home spending.
 """
     )
     consumer_options = list(_CONSUMER_METRIC_OPTIONS)
@@ -1390,10 +1390,10 @@ visits in a more selective environment, especially after several years of price-
 
 ### Fast casual brands that capture consumer attention should see opportunity
 
-The next question is which brands are still earning consumer attention. To frame that, this section will compare
-GDELT news / media attention across the six fast casual names on the left and Google Trends interest on the right.
-Together, those views should help separate brands that are merely waiting for the category to improve from brands
-that are actively staying top-of-mind with consumers.
+To frame which brands are still earning consumer attention, 
+GDELT news / media attention was compared across the six fast casual names on the left and Google Trends interest on the right.
+Together, those views should help separate brands that are waiting for the category to improve from brands
+that are actively staying top-of-mind with consumers. Paid data can be much more helpful, but these free sources are a useful check.
 """
     )
 
@@ -1479,8 +1479,7 @@ that are actively staying top-of-mind with consumers.
 The clearest takeaway is that **CAVA is the positive outlier**. GDELT is event-driven, so media coverage can spike
 around earnings, executive news, menu launches, controversies, or expansion headlines; Google Trends is the cleaner
 read on sustained consumer pull. On that measure, CAVA has held the strongest and most persistent search-interest
-growth in the current brand set, while the other available brands look more muted. That matters because it suggests
-CAVA is not just benefiting from category recovery or episodic press attention; it is still earning incremental
+growth in the current brand set, while the other available brands look more muted. This suggests CAVA is still earning incremental
 consumer mindshare.
 """
     )

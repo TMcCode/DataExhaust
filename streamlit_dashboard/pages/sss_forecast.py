@@ -946,16 +946,35 @@ def _render_model_table(
 
 
 def _render_driver_editor(ticker: str, periods: list[str], dfs: dict[str, Any]) -> None:
+    """Render the driver table with explicit Update / Reset buttons.
+
+    Edits in the ``st.data_editor`` only live in the widget's own state until the
+    user clicks **Update model**, which copies them into ``st.session_state[key]``
+    (the slot that ``_driver_values`` reads from when rebuilding the model). This
+    keeps the model below stable while the user is still adjusting inputs, instead
+    of re-rendering on every keystroke.
+    """
+    import numpy as np
+
     key = f"sss_model_driver_editor_{_DRIVER_STATE_VERSION}_{ticker}_{'_'.join(periods)}"
+    # `st.data_editor` keeps an internal cache of cell edits tied to its widget
+    # instance — clearing the session_state slot alone is *not* enough to drop
+    # pending edits. Versioning the widget key with a counter that we bump on
+    # Reset forces Streamlit to create a fresh widget with no edit history, which
+    # is the only reliable way to fully discard the user's in-flight typing.
+    reset_counter_key = f"{key}_reset_counter"
+    counter = int(st.session_state.get(reset_counter_key, 0))
+    widget_key = f"{key}_widget_v{counter}"
     default = _default_driver_table(ticker, periods, dfs)
     if key not in st.session_state:
         st.session_state[key] = default
-    display_df = st.session_state[key].copy()
+    applied = st.session_state[key]
+
     editor = st.data_editor(
-        display_df.drop(columns=["_key"]),
+        applied.drop(columns=["_key"]),
         hide_index=True,
         use_container_width=True,
-        key=f"{key}_widget",
+        key=widget_key,
         disabled=["Driver"],
         column_config={
             "Driver": st.column_config.TextColumn("Editable forecast driver"),
@@ -965,17 +984,70 @@ def _render_driver_editor(ticker: str, periods: list[str], dfs: dict[str, Any]) 
             },
         },
     )
-    edited = editor.merge(default[["Driver", "_key"]], on="Driver", how="left")
-    st.session_state[key] = edited[["Driver", "_key", *periods]]
+    edited_df = editor.merge(default[["Driver", "_key"]], on="Driver", how="left")[
+        ["Driver", "_key", *periods]
+    ]
+
+    # Pending = editor's current visible values differ from the applied snapshot.
+    # round() guards against float-display jitter; equal_nan keeps blank cells == blank.
+    pending = not np.allclose(
+        edited_df[periods].to_numpy(dtype=float),
+        applied[periods].to_numpy(dtype=float),
+        equal_nan=True,
+    )
+    # Reset also compares applied vs default so the button shows a disabled state when
+    # the model is already at defaults (no work for Reset to do).
+    at_defaults = np.allclose(
+        applied[periods].to_numpy(dtype=float),
+        default[periods].to_numpy(dtype=float),
+        equal_nan=True,
+    )
+
+    col_apply, col_reset, col_status = st.columns([1, 1, 3])
+    with col_apply:
+        if st.button(
+            "Update model",
+            type="primary",
+            key=f"{key}_apply",
+            disabled=not pending,
+            use_container_width=True,
+        ):
+            st.session_state[key] = edited_df
+            st.rerun()
+    with col_reset:
+        if st.button(
+            "Reset to defaults",
+            key=f"{key}_reset",
+            disabled=at_defaults and not pending,
+            use_container_width=True,
+        ):
+            st.session_state[key] = default
+            # Bump the widget-key counter so the next render builds a fresh
+            # data_editor instance — guarantees pending typed-but-not-applied
+            # edits are dropped along with the applied snapshot.
+            st.session_state[reset_counter_key] = counter + 1
+            st.rerun()
+    with col_status:
+        if pending:
+            st.caption("Pending edits in the table — click **Update model** to recompute the bridge and chart.")
+        else:
+            st.caption("Model is up to date with your driver inputs.")
 
 
 def main() -> None:
     st.title("SSS forecast")
     st.markdown(
         """
-Across the group, BROS, CAVA, and CMG screen most bullish, with improving traffic, positive mix, and limited
-dependence on pricing. SHAK is constructive, with steady mid-single-digit SSS supported by traffic and modest
-price/mix. SG and WING are more mixed, showing weak near-term traffic but a path toward H2 stabilization.
+I used the company-reported drivers (traffic, ticket, mix) to forecast SSS for the next four fiscal quarters.
+I chose this method because it’s how management decomposes growth. 
+**Digital mix**, **AUV**, and the **two-year stack comp** sit alongside the model as sanity checks — digital mix
+tests whether the channel story supports the ticket path (higher digital generally higher ticket), AUV tests whether implied per-unit revenue lands in a
+defensible range vs. recent reporting, and the two-year stack tests whether the forward path normalizes rather
+than implying a sharp reacceleration off prior-year strength.
+
+Across the group, **BROS**, **CAVA**, and **CMG** screened most bullish, with improving traffic, positive mix, and limited
+dependence on pricing. **SHAK** is constructive, with steady mid-single-digit SSS supported by traffic and modest
+price/mix. **SG** and **WING** are more mixed, showing weak near-term traffic but a path toward H2 stabilization.
 """
     )
 
