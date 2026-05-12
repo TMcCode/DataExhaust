@@ -12,7 +12,7 @@ determining what questions I wanted to get answers to, framing the dashboards, a
 Then I spent the rest of the time doing the work. I've added an approximate workflow and time to complete below.
 
 I chose to focus the project on understanding and forecasting **U.S. fast casual same-store sales**.
-I focused on **CMG**, **CAVA**, and **BROS** as the three primary tickers (largest system-scale names in this basket) and pulled **SG**, **WING**, and **SHAK** metrics as peers.
+I focused on **CMG**, **CAVA**, and **BROS** as the three primary tickers (largest names in this basket) and pulled **SG**, **WING**, and **SHAK** metrics as peers.
 
 **Outcome:** Across the group, **BROS** and **CAVA** screened most bullish, with improving traffic, positive mix, and limited dependence on pricing. **SHAK** is constructive, with steady mid-single-digit SSS supported by traffic and a continued price contribution. **CMG** looks more like stabilization than bullish recovery. **SG** and **WING** are more mixed, showing weak near-term traffic but a path toward H2 stabilization.
 
