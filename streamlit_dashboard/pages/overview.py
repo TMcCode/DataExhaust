@@ -8,10 +8,10 @@ st.markdown(
     rf"""
 Hi -- thanks for checking out my case study. I've put together this project similar to how I'd build out the team's data products.
 I spent a good amount of time planning:
-determining what questions I wanted to get answers to, how to frame the dashboard, and make sure it could be extended and not just treated as a one-off notebook.
-Then I did the work. I've added an approximate workflow and time to complete below.
+determining what questions I wanted to get answers to, framing the dashboards, and making sure the process could be as near production-ready as possible.
+Then I spent the rest of the time doing the work. I've added an approximate workflow and time to complete below.
 
-I chose to focus the center of the project on understanding and forecasting **U.S. fast casual same-store sales**.
+I chose to focus the project on understanding and forecasting **U.S. fast casual same-store sales**.
 I focused on **CMG**, **CAVA**, and **BROS** as the three primary tickers (largest system-scale names in this basket) and pulled **SG**, **WING**, and **SHAK** metrics as peers.
 
 **Outcome:** Across the group, **BROS** and **CAVA** screen most bullish, with improving traffic, positive mix, and limited dependence on pricing. **CMG** is bullish on traffic with mix turning from drag to neutral, though it still leans more on price than peers. **SHAK** is constructive, with steady mid-single-digit SSS supported by traffic and a continued price contribution. **SG** and **WING** are more mixed, showing weak near-term traffic but a path toward H2 stabilization.
@@ -58,14 +58,14 @@ st.markdown(
     """
 | Workstream | Hours |
 |---|---:|
-| Planning the dashboard and data model | 3 |
-| Pulling company metrics | 10 |
-| Reading earnings transcripts | 2 |
-| Pulling public API data | 4 |
-| Building the data ETL | 4 |
-| Analysis and interpretation | 5 |
-| Fixing the icon in the top left of the screen | 5 |
-| Arguing with ChatGPT over Streamlit spacing | 4 |
+| Planning the dashboard and data model | 4 |
+| Pulling company metrics | 7 |
+| Reading earnings transcripts | 3 |
+| Pulling public API data | 2 |
+| Building the data ETL | 3 |
+| Analysis and interpretation | 4 |
+| Fixing the icon in the top left of the screen | 2 (much) |
+| Arguing with ChatGPT over Streamlit spacing | 3 |
 """
 )
 
