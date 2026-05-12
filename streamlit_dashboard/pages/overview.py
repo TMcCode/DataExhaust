@@ -16,7 +16,7 @@ I focused on **CMG**, **CAVA**, and **BROS** as the three primary tickers (large
 
 **Outcome:** Across the group, **BROS** and **CAVA** screen most bullish, with improving traffic, positive mix, and limited dependence on pricing. **CMG** is bullish on traffic with mix turning from drag to neutral, though it still leans more on price than peers. **SHAK** is constructive, with steady mid-single-digit SSS supported by traffic and a continued price contribution. **SG** and **WING** are more mixed, showing weak near-term traffic but a path toward H2 stabilization.
 
-**tldr;**
+**Sections** 
 
 - **Macro- and industry-level analysis; where is SSS vs history; what is most useful for predicting SSS?** On **Macro & industry** I tie **spend-equiv** (**{macro_data.SPEND_EQUIV_BASE_YEAR}** basket), peer **SSS / pricing / traffic**, and **CPI–PPI–commodities** into one narrative: the peer group ran **hot** post-Covid as pricing offset input inflation, then **2025** shows **traffic softening** after years of mid-single-digit increases—more **give-back in traffic** than a collapse in the macro backdrop. For predicting SSS in without any paid data, the highest-value layer is still pulling metrics from filings: **traffic**, **ticket**, and **mix**. **OpenTable** seated diners add an industry demand check; **NYC/SF** transit is a narrow office-commuter read; **Google Trends** / **GDELT** add **awareness**. Broad **national macro** data is best treated as broad context, not a chain-specific SSS engine. None are nearly as helpful as **transaction data**.
 
