@@ -498,6 +498,14 @@ def main() -> None:
             uri = str(args.gcs_snapshot_uri).strip()
             mlp_gcs_snapshot.upload_bundle_gzip_pickle(bundle, uri)
             print(f"Uploaded dashboard bundle to {uri}")
+            # Also refresh the in-repo snapshot fallback so a single ETL run keeps
+            # both surfaces (GCS + zero-credential local) in sync. Streamlit Cloud
+            # has no GCP creds, so it always reads from this local pickle.
+            local_path = (
+                Path(__file__).resolve().parent / "data" / "snapshots" / "mlp_dashboard_bundle.pkl.gz"
+            )
+            mlp_gcs_snapshot.save_bundle_to_local_path(bundle, local_path)
+            print(f"Refreshed local snapshot bundle at {local_path}")
 
     print()
     print("=== ETL summary ===")

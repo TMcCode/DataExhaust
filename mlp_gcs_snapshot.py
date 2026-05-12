@@ -83,6 +83,24 @@ def download_bundle_gzip_pickle(gs_uri: str) -> dict[str, Any] | None:
         return None
 
 
+def save_bundle_to_local_path(
+    bundle: dict[str, Any],
+    path: str | os.PathLike[str],
+    *,
+    compresslevel: int = 6,
+) -> None:
+    """Pickle ``bundle`` (gzip) to a local file, creating parent dirs as needed.
+
+    Used by the master ETL so a single ``--gcs-snapshot-uri`` run can refresh
+    both the GCS object and the in-repo ``data/snapshots/mlp_dashboard_bundle.pkl.gz``
+    fallback bundle that ships with the dashboard for zero-credential demos.
+    """
+    p = Path(path).expanduser()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(p, "wb", compresslevel=compresslevel) as gz:
+        pickle.dump(bundle, gz, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 def load_bundle_from_local_path(path: str | os.PathLike[str]) -> dict[str, Any] | None:
     """Read a gzip+pickle bundle from a local file. Returns ``None`` on any failure.
 
