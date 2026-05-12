@@ -20,6 +20,9 @@ except ImportError:
 
 
 _TICKERS: tuple[str, ...] = ("CMG", "CAVA", "BROS", "WING", "SHAK", "SG")
+# Focus brands the editable bottom-section model is scoped to. The forecast summary
+# table and chart at the top still render all `_TICKERS` for cohort context.
+_MODELABLE_TICKERS: tuple[str, ...] = ("CMG", "BROS", "CAVA")
 _DEFAULT_TICKER = "CMG"
 _CHART_START_PRD = "2022Q1"
 _HISTORICAL_QUARTERS = 8
@@ -989,9 +992,20 @@ changed directly.
         st.warning("No peer tickers are available in `brand_period_wide`.")
         st.stop()
 
+    # Editable model below is scoped to focus brands (see _MODELABLE_TICKERS).
+    # Peers (WING/SHAK/SG) still appear in the top summary table and chart for
+    # cohort context, but their forecast models are not exposed.
+    modelable_tickers = tuple(t for t in tickers if t in _MODELABLE_TICKERS)
+    if not modelable_tickers:
+        st.warning("No focus tickers (CMG / BROS / CAVA) are present in `brand_period_wide`.")
+        st.stop()
+
     selected = str(st.session_state.get("sss_model_company", _DEFAULT_TICKER)).upper()
-    if selected not in tickers:
-        selected = _DEFAULT_TICKER if _DEFAULT_TICKER in tickers else tickers[0]
+    if selected not in modelable_tickers:
+        selected = _DEFAULT_TICKER if _DEFAULT_TICKER in modelable_tickers else modelable_tickers[0]
+        # Reset stale session state so the selectbox below doesn't try to display
+        # a now-hidden ticker as its initial value.
+        st.session_state["sss_model_company"] = selected
     st.markdown("[Jump to the editable forecast model](#forecast-model)")
     st.subheader("Forecast summary")
     st.dataframe(
@@ -1024,9 +1038,11 @@ changed directly.
     st.markdown("---")
     selected = st.selectbox(
         "Model company",
-        options=tickers,
-        index=tickers.index(selected),
+        options=modelable_tickers,
+        index=modelable_tickers.index(selected),
         key="sss_model_company",
+        help="Editable forecast model is scoped to the focus brands (CMG, BROS, CAVA). "
+        "Peers WING / SHAK / SG appear in the summary table and chart above for cohort context.",
     )
     actuals, forecast, forecast_periods = _full_model_for_ticker(
         wide,
