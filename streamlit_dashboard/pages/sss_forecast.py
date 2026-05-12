@@ -973,10 +973,9 @@ def main() -> None:
     st.title("SSS forecast")
     st.markdown(
         """
-This page translates the historical SSS bridge into a forward view for each ticker. The default forecasts are
-judgmental base cases built from recent reported traffic, ticket / price / mix disclosures, two-year stack
-normalization, and available management commentary; the selected-company model below lets those assumptions be
-changed directly.
+Across the group, BROS, CAVA, and CMG screen most bullish, with improving traffic, positive mix, and limited
+dependence on pricing. SHAK is constructive, with steady mid-single-digit SSS supported by traffic and modest
+price/mix. SG and WING are more mixed, showing weak near-term traffic but a path toward H2 stabilization.
 """
     )
 
