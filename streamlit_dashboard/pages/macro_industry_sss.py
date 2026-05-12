@@ -1314,8 +1314,8 @@ sales growth has slowed from the reopening surge, but it remains positive, and t
 is still a useful check that away-from-home spending has not collapsed after adjusting for food-away-from-home
 inflation. Worker pay is also still growing faster than headline CPI, giving consumers some offset to higher menu
 prices. Unemployment has ticked up, but remains below recessionary levels, while commuter activity in New York and
-San Francisco continues to recover from the post-COVID trough. The consumer is not uniformly strong, but the data
-does not point to a broad pullback in away-from-home spending.
+San Francisco continues to recover from the post-COVID trough. The consumer is mostly strong and the data
+does not point to a broader pullback in away-from-home spending. So, there could be an opportunity for fast casual brands that are able to earn positive attention. 
 """
     )
     consumer_options = list(_CONSUMER_METRIC_OPTIONS)
