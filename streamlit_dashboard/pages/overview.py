@@ -14,6 +14,8 @@ Then I did the work. I've added an approximate workflow and time to complete bel
 I chose to focus the center of the project on understanding and forecasting **U.S. fast casual same-store sales**.
 I focused on **CMG**, **CAVA**, and **BROS** as the three primary tickers (largest system-scale names in this basket) and pulled **SG**, **WING**, and **SHAK** metrics as peers.
 
+**Outcome:** Across the group, **BROS**, **CAVA**, and **CMG** screen most bullish, with improving traffic, positive mix, and limited dependence on pricing. **SHAK** is constructive, with steady mid-single-digit SSS supported by traffic and modest price/mix. **SG** and **WING** are more mixed, showing weak near-term traffic but a path toward H2 stabilization.
+
 **tldr;**
 
 - **Macro- and industry-level analysis; where is SSS vs history; what is most useful for predicting SSS?** On **Macro & industry** I tie **spend-equiv** (**{macro_data.SPEND_EQUIV_BASE_YEAR}** basket), peer **SSS / pricing / traffic**, and **CPI–PPI–commodities** into one narrative: the peer group ran **hot** post-Covid as pricing offset input inflation, then **2025** shows **traffic softening** after years of mid-single-digit increases—more **give-back in traffic** than a collapse in the macro backdrop. For predicting SSS in without any paid data, the highest-value layer is still pulling metrics from filings: **traffic**, **ticket**, and **mix**. **OpenTable** seated diners add an industry demand check; **NYC/SF** transit is a narrow office-commuter read; **Google Trends** / **GDELT** add **awareness**. Broad **national macro** data is best treated as broad context, not a chain-specific SSS engine. None are nearly as helpful as **transaction data**.
