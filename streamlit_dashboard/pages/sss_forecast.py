@@ -130,18 +130,25 @@ _NOTES: dict[str, str] = {
 }
 _FORECAST_RATIONALE: dict[str, str] = {
     "CMG": (
-        "CMG forecast logic: Q1 2026 returned to modestly positive comps, but management commentary framed Q2 "
-        "near +1% and full-year 2026 as roughly flat. The forecast keeps price positive but lower than the "
-        "2024/2025 inflation cycle, assumes product/check mix remains a modest drag, and lets traffic fade in "
-        "the back half so the two-year stack normalizes rather than implying a sharp reacceleration."
+        "CMG forecast logic: a **bullish** read against mgmt's Q2 ~+1% / FY26 roughly flat framing. Traffic "
+        "builds (+0.8% Q2 → +2.0% Q1'27) as value, throughput, and marketing stabilize transactions; menu "
+        "price moderates (1.5% → 1.3%) off the 2024/2025 inflation cycle; product/check mix fades from a "
+        "drag to neutral. Two-year stack normalizes rather than re-accelerating."
     ),
     "CAVA": (
-        "CAVA forecast logic: defaults assume positive traffic and check contribution, but with deceleration as "
-        "the brand laps stronger awareness, new-market trial, and elevated recent same-restaurant sales growth."
+        "CAVA forecast logic: a **bullish** read with the model leaning on traffic and mix given FY26's modest "
+        "pricing guide. Traffic builds (+1.9% Q1 → +3.5% Q4) on brand momentum and unit maturity against an "
+        "easing 2025 compare; menu price stays modest (~1.0% → 0.8%); mix holds steady (~0.9%) from menu, "
+        "digital, and premium attach. Two-year stack elevated but not sharply re-accelerating off strong "
+        "2024/2025 prints."
     ),
     "BROS": (
-        "BROS forecast logic: defaults assume gradual traffic improvement as the store base matures, with check "
-        "growth supported by pricing and mix but not returning to the strongest inflation-period contribution."
+        "BROS forecast logic: a **bullish** read built around mgmt's Q3 price roll-off. Traffic builds "
+        "(+1.8% Q2 → +2.6% Q1'27) on awareness and newer-market maturation; menu price steps down 1.5% → 0.5% "
+        "from Q3; mix steps **up** (1.5% → ~2.0–2.3%) as the food rollout reaches the broader company-operated "
+        "base, offsetting the price roll-off. **Caveat:** a production model would likely need to separate "
+        "**company-operated** vs **franchise** SSS — BROS reports system-wide same-shop, but the company-op "
+        "base is what flows through to restaurant revenue. This dashboard models the reported headline only."
     ),
     "WING": (
         "WING forecast logic: defaults assume steady low-single-digit SSS from modest traffic and check, with "
