@@ -1052,9 +1052,11 @@ tests whether the channel story supports the ticket path (higher digital general
 defensible range vs. recent reporting, and the two-year stack tests whether the forward path normalizes rather
 than implying a sharp reacceleration off prior-year strength.
 
-Across the group, **BROS**, **CAVA**, and **CMG** screened most bullish, with improving traffic, positive mix, and limited
-dependence on pricing. **SHAK** is constructive, with steady mid-single-digit SSS supported by traffic and modest
-price/mix. **SG** and **WING** are more mixed, showing weak near-term traffic but a path toward H2 stabilization.
+Across the group, **BROS** and **CAVA** screened most bullish, with improving traffic, positive mix, and limited
+dependence on pricing. **CMG** is bullish on traffic with mix turning from drag to neutral, though it still leans
+more on price than peers. **SHAK** is constructive, with steady mid-single-digit SSS supported by traffic and a
+continued price contribution. **SG** and **WING** are more mixed, showing weak near-term traffic but a path toward
+H2 stabilization.
 """
     )
 
