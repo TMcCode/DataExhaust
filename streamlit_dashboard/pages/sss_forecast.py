@@ -992,20 +992,9 @@ changed directly.
         st.warning("No peer tickers are available in `brand_period_wide`.")
         st.stop()
 
-    # Editable model below is scoped to focus brands (see _MODELABLE_TICKERS).
-    # Peers (WING/SHAK/SG) still appear in the top summary table and chart for
-    # cohort context, but their forecast models are not exposed.
-    modelable_tickers = tuple(t for t in tickers if t in _MODELABLE_TICKERS)
-    if not modelable_tickers:
-        st.warning("No focus tickers (CMG / BROS / CAVA) are present in `brand_period_wide`.")
-        st.stop()
-
     selected = str(st.session_state.get("sss_model_company", _DEFAULT_TICKER)).upper()
-    if selected not in modelable_tickers:
-        selected = _DEFAULT_TICKER if _DEFAULT_TICKER in modelable_tickers else modelable_tickers[0]
-        # Reset stale session state so the selectbox below doesn't try to display
-        # a now-hidden ticker as its initial value.
-        st.session_state["sss_model_company"] = selected
+    if selected not in tickers:
+        selected = _DEFAULT_TICKER if _DEFAULT_TICKER in tickers else tickers[0]
     st.markdown("[Jump to the editable forecast model](#forecast-model)")
     st.subheader("Forecast summary")
     st.dataframe(
@@ -1036,21 +1025,39 @@ changed directly.
         st.line_chart(chart_df.pivot_table(index="Prd_Nm", columns="Ticker", values=_CHART_METRICS[metric][0]))
 
     st.markdown("---")
+    # Dropdown shows all cohort tickers; peers carry a 🔒 indicator and the
+    # editable model below is gated on `selected in _MODELABLE_TICKERS`.
     selected = st.selectbox(
         "Model company",
-        options=modelable_tickers,
-        index=modelable_tickers.index(selected),
+        options=tickers,
+        index=tickers.index(selected),
         key="sss_model_company",
-        help="Editable forecast model is scoped to the focus brands (CMG, BROS, CAVA). "
-        "Peers WING / SHAK / SG appear in the summary table and chart above for cohort context.",
+        format_func=lambda t: t if t in _MODELABLE_TICKERS else f"{t} \U0001f512 peer (model not exposed)",
+        help="The editable forecast model is scoped to focus brands (CMG, BROS, CAVA). "
+        "Peer brands (WING, SHAK, SG) appear in the dropdown for visibility but their "
+        "models are not part of this case study.",
     )
+
+    st.markdown('<div id="forecast-model"></div>', unsafe_allow_html=True)
+
+    if selected not in _MODELABLE_TICKERS:
+        st.subheader(f"{selected} forecast model")
+        st.info(
+            f"**{selected}** is a peer brand in this cohort and appears in the summary "
+            "table and chart above for context. The editable forecast model is scoped "
+            "to the three focus brands per the case study brief — select **CMG**, "
+            "**BROS**, or **CAVA** to interact with the model."
+        )
+        st.subheader("Company notes")
+        st.info(_NOTES.get(selected, "Definitions differ by company; the model keeps the same standardized rows across the peer set."))
+        return
+
     actuals, forecast, forecast_periods = _full_model_for_ticker(
         wide,
         selected,
         selected_ticker=selected,
         dfs=workbook_dfs,
     )
-    st.markdown('<div id="forecast-model"></div>', unsafe_allow_html=True)
     st.subheader(f"{selected} forecast model")
     st.caption(_FORECAST_RATIONALE.get(selected, "Forecast assumptions are judgmental and can be changed in the editable driver table."))
     _render_driver_editor(selected, forecast_periods, workbook_dfs)
