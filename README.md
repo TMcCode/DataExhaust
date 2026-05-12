@@ -4,7 +4,7 @@ A Streamlit dashboard and ETL pipeline analyzing U.S. fast-casual same-store
 sales against macro and alternative data. Anchored on **CMG**, **CAVA**, and
 **BROS** with **SHAK**, **WING**, and **SG** as peers.
 
-> **Live dashboard:** _(paste your Streamlit Community Cloud URL here after deploy)_
+> **Live dashboard:** <https://mclynn-fastcasual-sss.streamlit.app>
 
 The narrative content (what the analysis says, charts, forecasts, limitations) lives
 inside the dashboard itself — start at the **Overview** page. This README explains
