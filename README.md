@@ -15,8 +15,8 @@ how the code is laid out and how to run it.
 ## Quick start (zero credentials, ~2 minutes)
 
 ```bash
-git clone <this-repo>
-cd MLP_Restaurant_CaseStudy
+git clone https://github.com/TMcCode/DataExhaust.git
+cd DataExhaust
 pip install -r requirements.txt
 streamlit run app.py
 ```
