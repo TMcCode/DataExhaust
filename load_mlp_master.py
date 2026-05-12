@@ -22,6 +22,18 @@ import mlp_gcs_snapshot
 import sheets_client
 
 
+def _sheets_loaded_ok(dfs: dict[str, Any]) -> bool:
+    """``True`` iff Sheets returned non-empty workbook tables (i.e., credentials worked)."""
+    hv = dfs.get("historical_values")
+    return hv is not None and not hv.empty
+
+
+def _macro_loaded_ok(macro: dict[str, Any]) -> bool:
+    """``True`` iff the FRED-backed monthly macro frame has rows."""
+    m = macro.get("monthly")
+    return m is not None and not m.empty
+
+
 def load_all_mlp_data(
     spreadsheet_id: str | None = None,
     macro_observation_start: str = "2000-01-01",
@@ -34,18 +46,29 @@ def load_all_mlp_data(
 ) -> dict[str, Any]:
     """Pull Sheets once, optionally build wide panel reuse that snapshot, fetch macro.
 
+    Each upstream source skips gracefully on missing credentials (see
+    :func:`sheets_client.load_mlp_fast_casual_dataframes` and
+    :func:`macro_data.load_macro_dataframes`). Dependent steps (wide panel,
+    analytic panel) are skipped here when their inputs came back empty, so a
+    reviewer with **no API keys at all** can run this without crashing.
+
     Returns:
         ``mlp_sheets`` — same keys as :func:`sheets_client.load_mlp_fast_casual_dataframes`
+            (empty DataFrames with expected columns when credentials missing)
         ``macro`` — ``monthly``, ``calendar_quarter``, plus ``annual_<year>_spend_equiv`` (see
-        :func:`macro_data.spend_equiv_annual_dict_key`) from :func:`macro_data.load_macro_dataframes`
-        ``brand_period_wide`` — if ``build_wide`` (from :func:`sheets_client.build_mlp_brand_period_wide_df`)
-        ``analytic_panel`` — if ``join_analytic_macro`` (fiscal → calendar-quarter macro; :mod:`analytic_panel`)
+            :func:`macro_data.spend_equiv_annual_dict_key`) from :func:`macro_data.load_macro_dataframes`
+            (empty when ``FRED_API_KEY`` missing or ``load_macro=False``)
+        ``brand_period_wide`` — if ``build_wide`` **and** sheets loaded with rows
+        ``analytic_panel`` — if ``join_analytic_macro`` **and** both sheets + macro loaded with rows
 
     ``verbose``: print progress (off for Streamlit / embedded callers).
     """
     if verbose:
         print("Loading Google Sheets...", flush=True)
     dfs = sheets_client.load_mlp_fast_casual_dataframes(spreadsheet_id)
+    sheets_ok = _sheets_loaded_ok(dfs)
+    if verbose and not sheets_ok:
+        print("  → skipped (no credentials); continuing with empty workbook frames.", flush=True)
 
     if load_macro and verbose:
         if include_commodity_csvs:
@@ -61,29 +84,42 @@ def load_all_mlp_data(
         if load_macro
         else {"monthly": pd.DataFrame(), "calendar_quarter": pd.DataFrame()}
     )
+    macro_ok = _macro_loaded_ok(macro)
+    if verbose and load_macro and not macro_ok:
+        print("  → skipped (no FRED_API_KEY); continuing with empty macro frames.", flush=True)
 
     out: dict[str, Any] = {"mlp_sheets": dfs, "macro": macro}
 
     if build_wide:
-        out["brand_period_wide"] = sheets_client.build_mlp_brand_period_wide_df(
-            spreadsheet_id,
-            dfs=dfs,
-        )
+        if sheets_ok:
+            out["brand_period_wide"] = sheets_client.build_mlp_brand_period_wide_df(
+                spreadsheet_id,
+                dfs=dfs,
+            )
+        elif verbose:
+            print(
+                "Brand wide panel: skipped (Sheets workbook is empty; needs HistoricalValues rows).",
+                flush=True,
+            )
 
-    if (
-        join_analytic_macro
-        and build_wide
-        and load_macro
-        and "brand_period_wide" in out
-    ):
+    if join_analytic_macro:
         cq = macro.get("calendar_quarter")
-        if cq is None or cq.empty:
-            raise ValueError("join_analytic_macro requires non-empty macro['calendar_quarter']")
-        out["analytic_panel"] = analytic_panel.join_wide_with_calendar_macro_quarterly(
-            out["brand_period_wide"],
-            dfs["fiscal_dates"],
-            cq,
-        )
+        if sheets_ok and macro_ok and "brand_period_wide" in out and cq is not None and not cq.empty:
+            out["analytic_panel"] = analytic_panel.join_wide_with_calendar_macro_quarterly(
+                out["brand_period_wide"],
+                dfs["fiscal_dates"],
+                cq,
+            )
+        elif verbose:
+            missing = []
+            if not sheets_ok:
+                missing.append("Sheets")
+            if not macro_ok:
+                missing.append("macro")
+            print(
+                f"Analytic panel: skipped (requires non-empty {' + '.join(missing) or 'wide + macro'}).",
+                flush=True,
+            )
     return out
 
 
@@ -341,14 +377,20 @@ def main() -> None:
     )
 
     s = bundle["mlp_sheets"]
-    print("MLP Sheets:")
+    sheets_ok = _sheets_loaded_ok(s)
+    print("MLP Sheets:" if sheets_ok else "MLP Sheets: SKIPPED (no credentials)")
     print(f"  historical_values: {s['historical_values'].shape}")
     print(f"  fiscal_dates:      {s['fiscal_dates'].shape}")
     print(f"  metric_names:      {s['metric_names'].shape}")
 
     m = bundle["macro"]
+    macro_ok = _macro_loaded_ok(m)
     if args.no_macro:
         print("Macro (FRED): skipped (--no-macro)")
+    elif not macro_ok:
+        print("Macro (FRED): SKIPPED (FRED_API_KEY not set)")
+        print(f"  monthly:           {m['monthly'].shape}")
+        print(f"  calendar_quarter: {m['calendar_quarter'].shape}")
     else:
         print("Macro (FRED):")
         print(f"  monthly:           {m['monthly'].shape}")
@@ -395,17 +437,20 @@ def main() -> None:
         )
         _have = [c for c in _bridge if c in w.columns]
         print(f"  revenue-bridge columns in frame: {_have}")
-    else:
+    elif args.no_wide:
         print("brand_period_wide: (skipped --no-wide)")
+    else:
+        print("brand_period_wide: SKIPPED (Sheets workbook empty — needs credentials)")
 
     if args.analytic_panel:
         if "analytic_panel" not in bundle:
-            parser.error("--analytic-panel requires wide + macro (omit --no-wide and --no-macro)")
-        ap = bundle["analytic_panel"]
-        print(f"analytic_panel: {ap.shape}")
-        if "fiscal_spans_calendar_quarters" in ap.columns:
-            n_spans = int(ap["fiscal_spans_calendar_quarters"].fillna(False).sum())
-            print(f"  fiscal_spans_calendar_quarters True: {n_spans} rows")
+            print("analytic_panel: SKIPPED (requires non-empty Sheets + macro)")
+        else:
+            ap = bundle["analytic_panel"]
+            print(f"analytic_panel: {ap.shape}")
+            if "fiscal_spans_calendar_quarters" in ap.columns:
+                n_spans = int(ap["fiscal_spans_calendar_quarters"].fillna(False).sum())
+                print(f"  fiscal_spans_calendar_quarters True: {n_spans} rows")
 
     if "brand_period_wide" in bundle and not args.skip_export_wide_csv:
         out_path = (
@@ -420,31 +465,63 @@ def main() -> None:
             wide=bundle["brand_period_wide"],
         )
         print(f"Wrote wide CSV: {path_written}")
+    elif args.export_wide_csv is not None and "brand_period_wide" not in bundle:
+        print("Wide CSV: SKIPPED (Sheets workbook is empty — needs credentials).")
 
     if args.export_feature_csvs is not None:
-        if "brand_period_wide" not in bundle or args.no_macro:
-            parser.error("--export-feature-csvs requires wide panel and macro (omit --no-wide and --no-macro)")
-        dest = Path(args.export_feature_csvs).expanduser().resolve()
-        tables = feature_panel.build_macro_joined_panels(
-            bundle["brand_period_wide"],
-            bundle["mlp_sheets"]["fiscal_dates"],
-            bundle["macro"],
-        )
-        fp_paths = feature_panel.export_macro_joined_panel_csvs(tables, directory=dest)
-        for key, csv_path in fp_paths.items():
-            print(f"Wrote inspection feature CSV ({key}): {csv_path}")
+        if "brand_period_wide" not in bundle or not macro_ok:
+            print(
+                "Feature CSVs: SKIPPED (requires Sheets + macro; one or both came back empty)."
+            )
+        else:
+            dest = Path(args.export_feature_csvs).expanduser().resolve()
+            tables = feature_panel.build_macro_joined_panels(
+                bundle["brand_period_wide"],
+                bundle["mlp_sheets"]["fiscal_dates"],
+                bundle["macro"],
+            )
+            fp_paths = feature_panel.export_macro_joined_panel_csvs(tables, directory=dest)
+            for key, csv_path in fp_paths.items():
+                print(f"Wrote inspection feature CSV ({key}): {csv_path}")
 
     if args.gcs_snapshot_uri:
-        if "brand_period_wide" not in bundle or args.no_macro or args.no_wide:
-            parser.error("--gcs-snapshot-uri requires wide + macro (omit --no-wide and --no-macro)")
-        bundle["feature_tables"] = feature_panel.build_macro_joined_panels(
-            bundle["brand_period_wide"],
-            bundle["mlp_sheets"]["fiscal_dates"],
-            bundle["macro"],
+        if "brand_period_wide" not in bundle or not macro_ok or args.no_wide:
+            print(
+                "GCS snapshot upload: SKIPPED (requires Sheets + macro; one or both came back empty)."
+            )
+        else:
+            bundle["feature_tables"] = feature_panel.build_macro_joined_panels(
+                bundle["brand_period_wide"],
+                bundle["mlp_sheets"]["fiscal_dates"],
+                bundle["macro"],
+            )
+            uri = str(args.gcs_snapshot_uri).strip()
+            mlp_gcs_snapshot.upload_bundle_gzip_pickle(bundle, uri)
+            print(f"Uploaded dashboard bundle to {uri}")
+
+    print()
+    print("=== ETL summary ===")
+    print(f"  Google Sheets    : {'OK' if sheets_ok else 'SKIPPED (no service-account JSON)'}")
+    if args.no_macro:
+        print("  FRED macro       : SKIPPED (--no-macro)")
+    else:
+        print(f"  FRED macro       : {'OK' if macro_ok else 'SKIPPED (FRED_API_KEY not set)'}")
+    print(
+        "  Brand wide panel : "
+        + ("OK" if "brand_period_wide" in bundle else "SKIPPED (depends on Sheets)")
+    )
+    if args.analytic_panel:
+        print(
+            "  Analytic panel   : "
+            + ("OK" if "analytic_panel" in bundle else "SKIPPED (depends on Sheets + macro)")
         )
-        uri = str(args.gcs_snapshot_uri).strip()
-        mlp_gcs_snapshot.upload_bundle_gzip_pickle(bundle, uri)
-        print(f"Uploaded dashboard bundle to {uri}")
+    if not (sheets_ok and macro_ok):
+        print()
+        print(
+            "  Note: this is a partial run. The dashboard ships a frozen bundle at\n"
+            "        data/snapshots/mlp_dashboard_bundle.pkl.gz that already contains every\n"
+            "        chart's data; you only need to re-run this ETL if you want fresh pulls."
+        )
 
     if args.gtrends:
         import gtrends_monthly_brands

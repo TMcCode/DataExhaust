@@ -91,6 +91,7 @@ from __future__ import annotations
 import os
 import re
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -374,6 +375,34 @@ def _require_fred_api_key() -> str:
         "https://fred.stlouisfed.org/docs/api/api_key.html"
     )
     raise RuntimeError(hint)
+
+
+def resolve_fred_api_key_optional() -> str | None:
+    """Return a validated FRED key if any source has one, else ``None`` (no raise).
+
+    Same lookup chain as :func:`_require_fred_api_key` but swallows the missing-key
+    case so :func:`load_macro_dataframes` can short-circuit to an empty bundle for
+    zero-credential ETL runs. Invalid keys (non-32-char) still raise — we only soften
+    *missing*, not *malformed*.
+    """
+    try:
+        return _require_fred_api_key()
+    except RuntimeError:
+        return None
+
+
+def _empty_macro_bundle() -> dict[str, pd.DataFrame]:
+    """Schema-correct empty replacement for :func:`load_macro_dataframes`.
+
+    Keys match the success path (``monthly``, ``calendar_quarter``,
+    ``annual_<year>_spend_equiv``) so downstream callers (``feature_panel`` joins,
+    Streamlit pages) hit a no-op rather than a ``KeyError``.
+    """
+    return {
+        "monthly": pd.DataFrame(),
+        "calendar_quarter": pd.DataFrame(),
+        spend_equiv_annual_dict_key(): pd.DataFrame(),
+    }
 
 
 def _fred_http_error_message(r: requests.Response) -> str:
@@ -887,7 +916,21 @@ def load_macro_dataframes(
         calendar_quarter        — quarter-end rows, levels + 4-quarter YoY + same USD anchors
         annual_<year>_spend_equiv — calendar-year rows; mean of monthly ``equiv_usd_1000_at_<year>avg_*``
             (restaurant inputs plus headline CPI-U all-items spend-equiv; see :data:`SPEND_EQUIV_AT_ANCHOR_ALL_SPECS`)
+
+    Graceful skip: if ``FRED_API_KEY`` is unavailable (see
+    :func:`resolve_fred_api_key_optional`), emits a warning and returns schema-correct
+    *empty* DataFrames so the rest of the ETL can still run.
     """
+    if resolve_fred_api_key_optional() is None:
+        warnings.warn(
+            "Macro skipped: FRED_API_KEY not set (look in repo .env / "
+            ".streamlit/secrets.toml / shell env / st.secrets). Get a free key at "
+            "https://fredaccount.stlouisfed.org/apikeys . Returning empty macro frames "
+            "so workbook / alt-data steps can proceed.",
+            stacklevel=2,
+        )
+        return _empty_macro_bundle()
+
     levels = load_macro_levels_monthly(
         observation_start,
         include_commodity_csvs=include_commodity_csvs,

@@ -10,11 +10,24 @@ from __future__ import annotations
 
 import os
 import re
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Tuple
 
 _SCOPES = ("https://www.googleapis.com/auth/spreadsheets",)
+
+# Schema of the empty fallback returned by load_mlp_fast_casual_dataframes when no
+# credentials are available. Same column lists used by the success path so downstream
+# code (build_mlp_brand_period_wide_df, dashboard pages) sees the expected shape.
+_EMPTY_SHEETS_SCHEMA: dict[str, tuple[str, ...]] = {
+    "historical_values": ("Ticker", "Prd_Nm", "Metric", "MetricValue", "Footnotes"),
+    "fiscal_dates": ("Ticker", "Prd_Nm", "Prd_Strt", "Prd_End", "days", "isEst"),
+    "metric_names": ("Ticker", "Metric", "CommonName"),
+    "sss_forecasts": (
+        "Ticker", "Prd_Nm", "CommonName", "Value", "Source", "Footnote", "UpdateDate",
+    ),
+}
 
 
 def credentials_path() -> Path:
@@ -22,6 +35,27 @@ def credentials_path() -> Path:
     if override:
         return Path(override).expanduser()
     return Path(__file__).resolve().parent / "data-exhaust-key.json"
+
+
+def sheets_credentials_available() -> bool:
+    """``True`` iff a Sheets service-account JSON is reachable on disk.
+
+    Used by :func:`load_mlp_fast_casual_dataframes` for the graceful-skip path so the
+    rest of the ETL (FRED, alt-data CSVs, etc.) can still run for a reviewer who has
+    *no* Google credentials. See ``GOOGLE_SHEETS_CREDENTIALS`` env var for overrides.
+    """
+    return credentials_path().is_file()
+
+
+def _empty_sheets_bundle() -> dict[str, Any]:
+    """Schema-correct empty replacement for :func:`load_mlp_fast_casual_dataframes`.
+
+    Empty DataFrames with the *right column names* let downstream code (wide-panel
+    builder, dashboard pages) execute without ``KeyError`` even when no rows loaded.
+    """
+    import pandas as pd
+
+    return {key: pd.DataFrame(columns=list(cols)) for key, cols in _EMPTY_SHEETS_SCHEMA.items()}
 
 
 def get_gspread_client():
@@ -72,8 +106,22 @@ def load_mlp_fast_casual_dataframes(
       - ``SSSForecasts`` — optional forecast defaults: Ticker, Prd_Nm, CommonName, Value, Source, Footnote
 
     Requires: ``pip install gspread pandas``
+
+    Graceful skip: if no service-account JSON is reachable (see
+    :func:`sheets_credentials_available`), emits a warning and returns schema-correct
+    *empty* DataFrames so the rest of the ETL can still run.
     """
     import pandas as pd
+
+    if not sheets_credentials_available():
+        warnings.warn(
+            "Google Sheets skipped: no service-account JSON at "
+            f"{credentials_path()} (set GOOGLE_SHEETS_CREDENTIALS or place "
+            "data-exhaust-key.json next to sheets_client.py). Returning empty "
+            "workbook frames so downstream macro / alt-data steps can proceed.",
+            stacklevel=2,
+        )
+        return _empty_sheets_bundle()
 
     sid = spreadsheet_id or MLP_FAST_CASUAL_SPREADSHEET_ID
     sh = open_spreadsheet(sid)
