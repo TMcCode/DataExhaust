@@ -72,7 +72,7 @@ st.markdown(
 st.subheader("Free Sources I Pulled Data From")
 st.markdown(
     f"""
-- **Company workbook** — Google Sheet tabs *HistoricalValues*, *FiscalDates*, and *MetricNames*.
+- **SEC filings** — 10-Ks, 10-Qs, and other SEC filings for the companies in the basket pulled from EDGAR.
   Fiscal period metrics are joined to calendar macro using `Prd_End`.
 - **FRED** — unemployment, income, sentiment, gas, retail sales, restaurant / broad **CPI-U** (FAFH,
   headline `CPIAUCSL`, core `CPILFESL`, food at home `CUSR0000SAF11`), plus **BLS PPI** shopping &
