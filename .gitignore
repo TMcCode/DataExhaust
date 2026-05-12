@@ -74,3 +74,12 @@ data/opentable_state_of_industry_yoy.csv
 
 # USDA NASS local fallback cache (derived data)
 .cache/
+
+# ETL refresh side-effect CSVs at the repo root — regenerated every time
+# `python load_mlp_master.py` runs. The dashboard reads from
+# `data/snapshots/mlp_dashboard_bundle.pkl.gz` (or the GCS copy), not these
+# files, so they should never be committed.
+/mlp_macro_monthly.csv
+/mlp_macro_calendar_quarter.csv
+/mlp_macro_annual_2019_spend_equiv.csv
+/mlp_cmg_bros_cava_wide.csv
