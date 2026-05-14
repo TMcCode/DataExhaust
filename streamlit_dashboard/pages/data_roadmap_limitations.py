@@ -92,11 +92,11 @@ brand-specific momentum from category growth, new-unit growth, or broad macro no
 | **Receipt data: Numerator, Fetch, Circana / NPD receipt panels** | Basket / initiative impact | Basket composition, attach rates, specific initiatives, limited-time offers, discounting, and household repeat behavior. | Receipt panels are not a census; sample bias and receipt capture quality can overstate precision. |
 | **Traditional industry data: Circana / NPD, Black Box Intelligence, Technomic** | Industry benchmark / profitability context | Industry traffic, ticket, pricing, daypart, menu category, and operator benchmarking. | Strong benchmarking, but definitions may differ from company-reported SSS and panels may underrepresent private / regional competitors. |
 
-For SSS forecasting, the strongest version would combine raw card data with mobility and awareness signals
-at the **mature-market level**. Raw transactions can get close to the math of SSS by decomposing spend into
-transaction count and average check, while non-growth states or mature trade areas help reduce the
-distortion from new restaurant openings. Receipt data then explains what changed inside the basket, and
-traditional industry data provides the category benchmark.
+For SSS forecasting, the strongest version would combine raw card data with mobility and awareness signals.
+Raw transactions can get close to the math of SSS by tracking merchant identifiers that have been seen in the
+data for the company's comparable-store base requirements. Aggregated card data can lean on non-growth states
+or mature trade areas to help reduce the distortion from new restaurant openings. Receipt data then explains what
+changed inside the basket, and traditional industry data provides the category benchmark.
 """
 )
 
