@@ -28,6 +28,7 @@ _CHART_START_PRD = "2022Q1"
 _HISTORICAL_QUARTERS = 8
 _FORECAST_QUARTERS = 4
 _DRIVER_STATE_VERSION = "v6"
+_FORECAST_MODEL_BUILD = "v6-units-revenue-bridge"  # bump when driver UI / forecast math changes
 # (common_name, editor label) — values live in SSSForecasts.CommonName and the driver table.
 _FORECAST_DRIVER_PCT: tuple[tuple[str, str], ...] = (
     ("traffic", "Traffic (%)"),
@@ -1445,7 +1446,13 @@ showing weak near-term traffic but a path toward H2 stabilization.
         dfs=workbook_dfs,
     )
     st.subheader(f"{selected} forecast model")
-    st.caption(_FORECAST_RATIONALE.get(selected, "Forecast assumptions are judgmental and can be changed in the editable driver table."))
+    st.caption(
+        f"Build: `{_FORECAST_MODEL_BUILD}` · "
+        + _FORECAST_RATIONALE.get(
+            selected,
+            "Forecast assumptions are judgmental and can be changed in the driver tables below.",
+        )
+    )
     _render_driver_editor(selected, forecast_periods, workbook_dfs, wide)
     actuals, forecast, _ = _full_model_for_ticker(
         wide,
