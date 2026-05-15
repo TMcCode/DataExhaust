@@ -27,7 +27,17 @@ _DEFAULT_TICKER = "CMG"
 _CHART_START_PRD = "2022Q1"
 _HISTORICAL_QUARTERS = 8
 _FORECAST_QUARTERS = 4
-_DRIVER_STATE_VERSION = "v5"
+_DRIVER_STATE_VERSION = "v6"
+# (common_name, editor label) — values live in SSSForecasts.CommonName and the driver table.
+_FORECAST_DRIVER_PCT: tuple[tuple[str, str], ...] = (
+    ("traffic", "Traffic (%)"),
+    ("menu_price", "Menu pricing (%)"),
+    ("check_mix", "Product / check mix (%)"),
+)
+_FORECAST_DRIVER_UNITS: tuple[tuple[str, str], ...] = (
+    ("total_units_open", "Total units open (#)"),
+)
+_FORECAST_DRIVERS: tuple[tuple[str, str], ...] = _FORECAST_DRIVER_PCT + _FORECAST_DRIVER_UNITS
 _CHART_METRICS: dict[str, tuple[str, str, str]] = {
     "SSS": ("sss", "Same-store sales (%)", ".1f"),
     "Traffic": ("traffic", "Traffic / transactions (%)", ".1f"),
@@ -63,7 +73,7 @@ _MODEL_ROWS: tuple[tuple[str, str, bool], ...] = (
     ("days", "Fiscal days", False),
     ("units_entering_comp_base", "Estimated units entering comp base *", False),
     ("total_units_begin", "Total units begin", False),
-    ("total_units_open", "Total units open", False),
+    ("total_units_open", "Total units open", True),
     ("total_units_closed", "Total units closed", False),
     ("total_units_end", "Total units end", False),
     ("auv", "AUV", False),
@@ -110,6 +120,7 @@ _SYSTEMWIDE_REVENUE_TICKERS = {"BROS", "WING", "SHAK"}
 _COMP_BASE_LAG_QTRS = {
     "CMG": 5,
     "CAVA": 4,
+    "BROS": 5,  # open 15 complete months or longer
     "SG": 5,
     "WING": 4,
     "SHAK": 8,
@@ -119,14 +130,97 @@ _ROW_STYLE_CLASS = {
     "Traffic *": "driver-row",
     "Menu pricing *": "driver-row",
     "Product / check mix *": "driver-row",
+    "Total units open *": "driver-row",
 }
+
+
+def _model_metric_label(row_key: str, *, ticker: str = "") -> str:
+    """Metric column label in the bridge table (must match ``_model_display_table``)."""
+    for rk, label, is_driver in _MODEL_ROWS:
+        if rk != row_key:
+            continue
+        if rk == "restaurant_rev" and ticker in _SYSTEMWIDE_REVENUE_TICKERS:
+            label = "Systemwide sales"
+        return f"{label} *" if is_driver else label
+    return row_key
+_RESTAURANT_REV_MEASURE: dict[str, str] = {
+    "CMG": "Food and beverage revenue",
+    "CAVA": "CAVA revenue",
+    "BROS": "System-wide sales",
+}
+
+
+def _restaurant_rev_row_label(ticker: str) -> str:
+    return "Systemwide sales" if ticker in _SYSTEMWIDE_REVENUE_TICKERS else "Restaurant revenue"
+
+
+def _forecast_methodology_markdown(ticker: str) -> str:
+    """Plain-English estimate row definitions for the forecast bridge (E columns)."""
+    rev_row = _restaurant_rev_row_label(ticker)
+    measure = _RESTAURANT_REV_MEASURE.get(ticker, "reported restaurant revenue")
+    lines = [
+        f"Forecast-quarter (**E**) rows below are model estimates, not company guidance. "
+        f"**{rev_row}** in the table is **{measure}** from filings.",
+        "",
+        "**Estimated SSS** — Sum of your editable drivers: traffic + menu pricing + product/check mix "
+        "(percent points). Historical quarters use reported values where mapped.",
+        "",
+        "**AUV** — Prior-year same fiscal quarter AUV grown by estimated SSS% "
+        f"(`prior AUV × (1 + SSS%)`). Reported AUV definitions differ by company (see Company notes).",
+        "",
+        "**Comparable restaurant dollars** — Year-over-year dollars from stores in the comp base. "
+        "When the prior-year same quarter has a disclosed comparable-dollar figure, the estimate scales it by "
+        "your SSS vs that quarter's reported SSS. Otherwise: prior-year "
+        f"{measure.lower()} × fiscal-day adjustment × SSS% × an implied comp-base share of revenue "
+        "(BROS uses disclosed system comp-base coverage; others use the median implied share from history).",
+        "",
+        "**New restaurant dollars** — Year-over-year dollars from non-comp and new stores. "
+        "When prior-year same quarter new-store dollars are disclosed, the estimate scales them by "
+        "forecast openings vs prior-year openings. Otherwise: historical dollars per opening × forecast openings, "
+        "or a partial-quarter AUV ramp on new units when history is thin.",
+        "",
+        f"**{rev_row}** — Prior-year same quarter {measure.lower()} (fiscal-day adjusted) "
+        "+ comparable restaurant dollars + new restaurant dollars. "
+        "Changing **Total units open** moves new-store dollars and therefore total revenue; "
+        "SSS drivers move comparable dollars and AUV.",
+    ]
+    if ticker == "BROS":
+        lines.insert(
+            2,
+            "BROS reports **system** same-shop sales; the systemwide sales bridge uses "
+            "disclosed system comp-base coverage.",
+        )
+        lines.extend(
+            [
+                "",
+                "**Company revenue** and **Franchise revenue** — Estimate quarters are left blank in this "
+                "dashboard. If modeled later, a starting point would be prior-year same-quarter "
+                "**company-operated shop sales** and **franchise royalties** (fees to the parent, not franchisee "
+                "shop sales), each fiscal-day adjusted and grown by estimated system SSS%. A fuller version would "
+                "split company-operated vs franchised unit bridges rather than applying one system SSS% to both.",
+            ]
+        )
+    return "\n".join(lines)
+
+
 _NOTES: dict[str, str] = {
-    "CMG": "- Estimated units entering comp base uses company-owned restaurants open for at least 13 full calendar months; approximated with openings from five quarters earlier.",
-    "CAVA": (
-        "- Estimated units entering comp base uses CAVA restaurants open 365 days or longer, including converted Zoes Kitchen locations open 365 days or longer after conversion; approximated with openings from four quarters earlier.\n"
-        "- CAVA reported a 53rd week in fiscal 2023, which inflates 2023 reported revenue but is excluded from SSS calculations."
+    "CMG": (
+        "- **Restaurant revenue metric used:** Food and beverage revenue\n"
+        "- Estimated units entering comp base uses company-owned restaurants open for at least 13 full calendar months; approximated with openings from five quarters earlier.\n"
+        "- **AUV (reported):** Average restaurant sales refers to the average trailing 12-month food and beverage revenue for company-owned restaurants in operation for at least 12 full calendar months."
     ),
-    "BROS": "- BROS has system same-shop sales and the best comparable-base coverage history. Coverage is useful for the dollar bridge but is not itself an SSS percentage.",
+    "CAVA": (
+        "- **Restaurant revenue metric used:** CAVA revenue\n"
+        "- Estimated units entering comp base uses CAVA restaurants open 365 days or longer, including converted Zoes Kitchen locations open 365 days or longer after conversion; approximated with openings from four quarters earlier.\n"
+        "- CAVA reported a 53rd week in fiscal 2023, which inflates 2023 reported revenue but is excluded from SSS calculations.\n"
+        '- **AUV (reported):** "CAVA AUV" is total revenue of operating CAVA Restaurants that were open for the entire trailing thirteen periods and CAVA digital kitchen sales for such period, divided by the number of operating CAVA Restaurants that were open for the entire trailing thirteen periods.'
+    ),
+    "BROS": (
+        "- **Restaurant revenue metric used:** Systemwide sales (system_sales).\n"
+        "- Estimated units entering comp base uses 15 complete months or longer as of the first day of the reporting period.\n"
+        "- Estimated units entering comp base uses are approximated with openings from five quarters earlier.\n"
+        "- **AUV (reported):** Cumulative YTD AUV is provided; quarters are weighted by systemwide sales cadence to get quarterly values."
+    ),
     "WING": "- Estimated units entering comp base uses restaurants open for at least 52 full weeks; approximated with openings from four quarters earlier.",
     "SHAK": "- Estimated units entering comp base uses Company-operated Shacks open for 24 full fiscal months or longer; approximated with openings from eight quarters earlier.",
     "SG": "- Estimated units entering comp base uses shops open for 15 complete months or longer as of the first day of the reporting period; approximated with openings from five quarters earlier.",
@@ -383,7 +477,27 @@ def _ticker_actuals(wide: pd.DataFrame, ticker: str) -> pd.DataFrame:
     return out.sort_values("Prd_Nm", key=lambda s: s.map(_prd_sort_key), kind="stable")
 
 
-def _sheet_forecast_defaults(dfs: dict[str, Any], ticker: str, periods: list[str]) -> pd.DataFrame:
+def _prior_year_units_open_defaults(
+    wide: pd.DataFrame, ticker: str, periods: list[str]
+) -> dict[str, float]:
+    """Fallback unit-open counts: prior-year same fiscal quarter from reported history."""
+    actuals = _ticker_actuals(wide, ticker)
+    lookup = _period_lookup(actuals)
+    out: dict[str, float] = {}
+    for period in periods:
+        prior_prd = _prior_year_prd(period)
+        prior_row = lookup.get(prior_prd or "", {})
+        out[period] = _to_number(prior_row.get("total_units_open", float("nan")))
+    return out
+
+
+def _sheet_forecast_defaults(
+    dfs: dict[str, Any],
+    ticker: str,
+    periods: list[str],
+    *,
+    wide: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     raw = dfs.get("sss_forecasts")
     if not isinstance(raw, pd.DataFrame) or raw.empty:
         return pd.DataFrame()
@@ -395,20 +509,22 @@ def _sheet_forecast_defaults(dfs: dict[str, Any], ticker: str, periods: list[str
     df["Prd_Nm"] = df["Prd_Nm"].astype(str).str.strip()
     df["CommonName"] = df["CommonName"].astype(str).str.strip()
     df = df[(df["Ticker"] == ticker) & df["Prd_Nm"].isin(periods)]
-    if df.empty:
-        return pd.DataFrame()
+    units_fallback = (
+        _prior_year_units_open_defaults(wide, ticker, periods) if wide is not None else {}
+    )
     rows: list[dict[str, Any]] = []
-    for key, label in (
-        ("traffic", "Traffic"),
-        ("menu_price", "Menu pricing"),
-        ("check_mix", "Product / check mix"),
-    ):
+    for key, label in _FORECAST_DRIVERS:
         row: dict[str, Any] = {"Driver": label, "_key": key}
         sub = df[df["CommonName"] == key].drop_duplicates(subset=["Prd_Nm"], keep="last")
         values = sub.set_index("Prd_Nm")["Value"].to_dict()
         for i, period in enumerate(periods):
-            fallback = _driver_default_value(ticker, key, i)
-            row[period] = _to_number(values.get(period, fallback))
+            if period in values:
+                fallback = _to_number(values[period])
+            elif key == "total_units_open":
+                fallback = units_fallback.get(period, float("nan"))
+            else:
+                fallback = _driver_default_value(ticker, key, i)
+            row[period] = fallback
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -425,15 +541,11 @@ def _forecast_default_footnotes(dfs: dict[str, Any], ticker: str) -> dict[tuple[
     df["Prd_Nm"] = df["Prd_Nm"].astype(str).str.strip()
     df["CommonName"] = df["CommonName"].astype(str).str.strip()
     df = df[(df["Ticker"] == ticker) & (df["Footnote"].astype(str).str.strip() != "")]
-    label_by_key = {
-        "traffic": "Traffic *",
-        "menu_price": "Menu pricing *",
-        "check_mix": "Product / check mix *",
-    }
     out: dict[tuple[str, str], str] = {}
     for _, row in df.iterrows():
-        label = label_by_key.get(str(row["CommonName"]))
-        if label:
+        common = str(row["CommonName"]).strip()
+        label = _model_metric_label(common, ticker=ticker)
+        if label != common:
             out[(label, str(row["Prd_Nm"]))] = str(row["Footnote"]).strip()
     return out
 
@@ -444,34 +556,50 @@ def _driver_default_value(ticker: str, key: str, idx: int) -> float:
     return float(values[min(idx, len(values) - 1)])
 
 
-def _default_driver_table(ticker: str, periods: list[str], dfs: dict[str, Any] | None = None) -> pd.DataFrame:
+def _default_driver_table(
+    ticker: str,
+    periods: list[str],
+    dfs: dict[str, Any] | None = None,
+    *,
+    wide: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     if dfs is not None:
-        sheet_defaults = _sheet_forecast_defaults(dfs, ticker, periods)
+        sheet_defaults = _sheet_forecast_defaults(dfs, ticker, periods, wide=wide)
         if not sheet_defaults.empty:
             return sheet_defaults
     defaults = _DEFAULT_FORECASTS.get(ticker, _DEFAULT_FORECASTS[_DEFAULT_TICKER])
+    units_fallback = (
+        _prior_year_units_open_defaults(wide, ticker, periods) if wide is not None else {}
+    )
     rows: list[dict[str, Any]] = []
-    for key, label in (
-        ("traffic", "Traffic"),
-        ("menu_price", "Menu pricing"),
-        ("check_mix", "Product / check mix"),
-    ):
+    for key, label in _FORECAST_DRIVERS:
         row: dict[str, Any] = {"Driver": label, "_key": key}
-        values = defaults[key]
-        for i, period in enumerate(periods):
-            row[period] = values[min(i, len(values) - 1)]
+        if key == "total_units_open":
+            for period in periods:
+                row[period] = units_fallback.get(period, float("nan"))
+        else:
+            values = defaults[key]
+            for i, period in enumerate(periods):
+                row[period] = values[min(i, len(values) - 1)]
         rows.append(row)
     return pd.DataFrame(rows)
 
 
-def _driver_values(ticker: str, periods: list[str], *, selected_ticker: str, dfs: dict[str, Any] | None = None) -> pd.DataFrame:
+def _driver_values(
+    ticker: str,
+    periods: list[str],
+    *,
+    selected_ticker: str,
+    dfs: dict[str, Any] | None = None,
+    wide: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     if ticker != selected_ticker:
-        return _default_driver_table(ticker, periods, dfs)
+        return _default_driver_table(ticker, periods, dfs, wide=wide)
     key = f"sss_model_driver_editor_{_DRIVER_STATE_VERSION}_{ticker}_{'_'.join(periods)}"
     stored = st.session_state.get(key)
     if isinstance(stored, pd.DataFrame):
         return stored.copy()
-    return _default_driver_table(ticker, periods, dfs)
+    return _default_driver_table(ticker, periods, dfs, wide=wide)
 
 
 def _driver_lookup(drivers: pd.DataFrame, row_key: str, period: str) -> float:
@@ -489,6 +617,128 @@ def _period_lookup(actuals: pd.DataFrame) -> dict[str, dict[str, Any]]:
     return compact.set_index("Prd_Nm").to_dict("index")
 
 
+def _median_finite(values: list[float]) -> float:
+    xs = [v for v in values if pd.notna(v)]
+    if not xs:
+        return float("nan")
+    return float(pd.Series(xs).median())
+
+
+def _calibrate_new_dollars_per_open(actuals: pd.DataFrame) -> float:
+    """Historical YoY new-store $ (m) per unit opened, when both are disclosed."""
+    ratios: list[float] = []
+    for _, row in actuals.iterrows():
+        new_d = _to_number(row.get("new_dollars"))
+        opens = _to_number(row.get("total_units_open"))
+        if pd.notna(new_d) and pd.notna(opens) and opens > 0:
+            ratios.append(new_d / opens)
+    return _median_finite(ratios)
+
+
+def _typical_comp_coverage(actuals: pd.DataFrame) -> float:
+    """Implied share of prior-year revenue in the comp base (from disclosed sss_dollars)."""
+    lookup = _period_lookup(actuals)
+    implied: list[float] = []
+    for _, row in actuals.iterrows():
+        sss_d = _to_number(row.get("sss_dollars"))
+        sss_pct = _to_number(row.get("sss"))
+        prior = lookup.get(_prior_year_prd(str(row["Prd_Nm"])) or "", {})
+        ly_rev = _to_number(prior.get("restaurant_rev"))
+        days = _to_number(row.get("days"))
+        ly_days = _to_number(prior.get("days"))
+        if pd.isna(sss_d) or pd.isna(sss_pct) or sss_pct == 0 or pd.isna(ly_rev) or ly_rev <= 0:
+            continue
+        day_factor = days / ly_days if pd.notna(days) and pd.notna(ly_days) and ly_days else 1.0
+        denom = ly_rev * day_factor * (sss_pct / 100.0)
+        if denom > 0:
+            implied.append(sss_d / denom)
+    cov = _median_finite(implied)
+    return cov if pd.notna(cov) else 1.0
+
+
+def _forecast_sss_dollars(
+    *,
+    actuals: pd.DataFrame,
+    prior: dict[str, Any],
+    prior_rev: float,
+    day_factor: float,
+    sss: float,
+    comp_coverage: float,
+) -> float:
+    """YoY comparable-restaurant $ contribution ($m)."""
+    prior_sss_d = _to_number(prior.get("sss_dollars"))
+    prior_sss_pct = _to_number(prior.get("sss"))
+    if pd.notna(prior_sss_d) and pd.notna(prior_sss_pct) and prior_sss_pct != 0 and pd.notna(sss):
+        return prior_sss_d * (sss / prior_sss_pct)
+    if pd.isna(prior_rev):
+        return float("nan")
+    cov = comp_coverage if pd.notna(comp_coverage) else _typical_comp_coverage(actuals)
+    comp_sales_base = prior_rev * day_factor
+    if pd.isna(sss):
+        return float("nan")
+    return comp_sales_base * (sss / 100.0) * cov
+
+
+def _forecast_new_dollars(
+    *,
+    actuals: pd.DataFrame,
+    prior: dict[str, Any],
+    units_open: float,
+    auv: float,
+) -> float:
+    """YoY new / non-comp restaurant $ contribution ($m), scaled from openings when needed."""
+    prior_new = _to_number(prior.get("new_dollars"))
+    prior_opens = _to_number(prior.get("total_units_open"))
+    if (
+        pd.notna(prior_new)
+        and pd.notna(prior_opens)
+        and prior_opens > 0
+        and pd.notna(units_open)
+    ):
+        return prior_new * (units_open / prior_opens)
+    dpu = _calibrate_new_dollars_per_open(actuals)
+    if pd.notna(dpu) and pd.notna(units_open):
+        return units_open * dpu
+    if pd.notna(auv) and pd.notna(units_open):
+        return units_open * (auv / 4.0) * 0.5
+    return float("nan")
+
+
+def _forecast_restaurant_rev(
+    *,
+    prior_rev: float,
+    day_factor: float,
+    sss: float,
+    sss_dollars: float,
+    new_dollars: float,
+) -> float:
+    """Restaurant revenue ($m) = prior-year same Q (day-adj.) + comp $ + new-store $."""
+    if pd.isna(prior_rev):
+        return float("nan")
+    base = prior_rev * day_factor
+    yoy_parts = [x for x in (sss_dollars, new_dollars) if pd.notna(x)]
+    if yoy_parts:
+        return base + sum(yoy_parts)
+    if pd.notna(sss):
+        return base * (1.0 + (sss / 100.0))
+    return float("nan")
+
+
+def _bridge_residual_yoy(
+    restaurant_rev: float,
+    prior_rev: float,
+    sss_dollars: float,
+    new_dollars: float,
+) -> float:
+    if pd.isna(restaurant_rev) or pd.isna(prior_rev):
+        return float("nan")
+    yoy = restaurant_rev - prior_rev
+    parts = [x for x in (sss_dollars, new_dollars) if pd.notna(x)]
+    if not parts:
+        return float("nan")
+    return yoy - sum(parts)
+
+
 def _forecast_frame(
     actuals: pd.DataFrame,
     ticker: str,
@@ -496,8 +746,11 @@ def _forecast_frame(
     *,
     selected_ticker: str,
     dfs: dict[str, Any] | None = None,
+    wide: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    drivers = _driver_values(ticker, periods, selected_ticker=selected_ticker, dfs=dfs)
+    drivers = _driver_values(
+        ticker, periods, selected_ticker=selected_ticker, dfs=dfs, wide=wide
+    )
     hist_lookup = _period_lookup(actuals)
     rows: list[dict[str, Any]] = []
     latest = actuals.iloc[-1]
@@ -506,6 +759,9 @@ def _forecast_frame(
         for _, row in actuals.iterrows()
     }
     comp_lag = _COMP_BASE_LAG_QTRS.get(ticker)
+    # Chain unit bridge across forecast quarters: Q(n) begin = Q(n-1) end, starting from
+    # the last reported quarter's ending unit count.
+    units_begin = _to_number(latest.get("total_units_end", float("nan")))
     for period in periods:
         prior_period = _prior_year_prd(period)
         prior = hist_lookup.get(prior_period or "", {})
@@ -518,28 +774,23 @@ def _forecast_frame(
         prior_traffic = _to_number(prior.get("traffic", float("nan")))
         prior_ticket = _to_number(prior.get("ticket", float("nan")))
         prior_rev = _to_number(prior.get("restaurant_rev", float("nan")))
-        prior_company_rev = _to_number(prior.get("company_rev", float("nan")))
-        prior_franchise_rev = _to_number(prior.get("franchise_rev", float("nan")))
         prior_auv = _to_number(prior.get("auv", float("nan")))
         prior_days = _to_number(prior.get("days", float("nan")))
         days = prior_days if pd.notna(prior_days) else _to_number(latest.get("days", float("nan")))
         prior_end = pd.to_datetime(prior.get("Prd_End", pd.NaT), errors="coerce")
         prd_end = prior_end + pd.DateOffset(years=1) if pd.notna(prior_end) else pd.NaT
         day_factor = days / prior_days if pd.notna(days) and pd.notna(prior_days) and prior_days else 1.0
-        latest_units = _to_number(latest.get("total_units_end", float("nan")))
-        prior_units_begin = _to_number(prior.get("total_units_begin", float("nan")))
         prior_units_open = _to_number(prior.get("total_units_open", float("nan")))
         prior_units_closed = _to_number(prior.get("total_units_closed", float("nan")))
-        units_begin = latest_units
-        units_open = prior_units_open
+        units_open = _driver_lookup(drivers, "total_units_open", period)
+        if pd.isna(units_open):
+            units_open = prior_units_open
         units_closed = prior_units_closed
         units_end = (
             units_begin + units_open - units_closed
             if pd.notna(units_begin) and pd.notna(units_open) and pd.notna(units_closed)
             else float("nan")
         )
-        if pd.isna(units_end):
-            units_end = prior_units_begin
         unit_open_lookup[period] = units_open
         comp_coverage = _to_number(prior.get("SystemCompBaseCoverage", float("nan")))
         comp_units = _to_number(prior.get("units_entering_comp_base", float("nan")))
@@ -548,20 +799,31 @@ def _forecast_frame(
             entering_units = _to_number(unit_open_lookup.get(entering_prd, float("nan")))
             if pd.notna(entering_units):
                 comp_units = entering_units
-        restaurant_rev = prior_rev * day_factor * (1 + (sss / 100)) if pd.notna(prior_rev) else float("nan")
-        company_rev = (
-            prior_company_rev * day_factor * (1 + (sss / 100))
-            if pd.notna(prior_company_rev)
-            else float("nan")
+        forecast_auv = prior_auv * (1 + (sss / 100)) if pd.notna(prior_auv) else float("nan")
+        sss_dollars = _forecast_sss_dollars(
+            actuals=actuals,
+            prior=prior,
+            prior_rev=prior_rev,
+            day_factor=day_factor,
+            sss=sss,
+            comp_coverage=comp_coverage,
         )
-        franchise_rev = (
-            prior_franchise_rev * day_factor * (1 + (sss / 100))
-            if pd.notna(prior_franchise_rev)
-            else float("nan")
+        new_dollars = _forecast_new_dollars(
+            actuals=actuals,
+            prior=prior,
+            units_open=units_open,
+            auv=forecast_auv,
         )
-        auv = prior_auv * (1 + (sss / 100)) if pd.notna(prior_auv) else float("nan")
-        comp_sales_base = prior_rev * day_factor if pd.notna(prior_rev) else float("nan")
-        sss_dollars = comp_sales_base * (sss / 100) * comp_coverage if pd.notna(comp_sales_base) and pd.notna(comp_coverage) else float("nan")
+        restaurant_rev = _forecast_restaurant_rev(
+            prior_rev=prior_rev,
+            day_factor=day_factor,
+            sss=sss,
+            sss_dollars=sss_dollars,
+            new_dollars=new_dollars,
+        )
+        bridge_residual = _bridge_residual_yoy(
+            restaurant_rev, prior_rev, sss_dollars, new_dollars
+        )
         row = {
             "Ticker": ticker,
             "Prd_Nm": period,
@@ -585,19 +847,17 @@ def _forecast_frame(
             "total_units_open": units_open,
             "total_units_closed": units_closed,
             "total_units_end": units_end,
-            "auv": auv,
+            "auv": forecast_auv,
             "restaurant_rev": restaurant_rev,
-            "company_rev": company_rev,
-            "franchise_rev": franchise_rev,
+            "company_rev": float("nan"),
+            "franchise_rev": float("nan"),
             "sss_dollars": sss_dollars,
-            "new_dollars": restaurant_rev - prior_rev - sss_dollars
-            if pd.notna(restaurant_rev) and pd.notna(prior_rev) and pd.notna(sss_dollars)
-            else float("nan"),
-            "restaurant_rev_yoy_bridge_residual": 0.0
-            if pd.notna(restaurant_rev) and pd.notna(prior_rev) and pd.notna(sss_dollars)
-            else float("nan"),
+            "new_dollars": new_dollars,
+            "restaurant_rev_yoy_bridge_residual": bridge_residual,
         }
         rows.append(row)
+        if pd.notna(units_end):
+            units_begin = units_end
     return pd.DataFrame(rows)
 
 
@@ -610,7 +870,14 @@ def _full_model_for_ticker(
 ) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
     actuals = _ticker_actuals(wide, ticker)
     periods = _next_prds(actuals["Prd_Nm"].iloc[-1])
-    forecast = _forecast_frame(actuals, ticker, periods, selected_ticker=selected_ticker, dfs=dfs)
+    forecast = _forecast_frame(
+        actuals,
+        ticker,
+        periods,
+        selected_ticker=selected_ticker,
+        dfs=dfs,
+        wide=wide,
+    )
     return actuals, forecast, periods
 
 
@@ -730,9 +997,7 @@ def _model_display_table(
         prd_end_row[prd] = _fmt(period_row.get("Prd_End", pd.NaT), "Prd_End")
     rows.extend([estimate_row, prd_end_row])
     for row_key, label, is_driver in _MODEL_ROWS:
-        if row_key == "restaurant_rev" and ticker in _SYSTEMWIDE_REVENUE_TICKERS:
-            label = "Systemwide sales"
-        display_label = f"{label} *" if is_driver else label
+        display_label = _model_metric_label(row_key, ticker=ticker)
         row: dict[str, str] = {"Metric": display_label}
         for _, period_row in combined.iterrows():
             prd = str(period_row["Prd_Nm"])
@@ -789,7 +1054,12 @@ def _render_model_table(
             if str(col).startswith("2026") or str(col).startswith("2027"):
                 if metric == "SSS":
                     cell_classes.append("sss-estimate-cell")
-                elif metric in {"Traffic *", "Menu pricing *", "Product / check mix *"}:
+                elif metric in {
+                    "Traffic *",
+                    "Menu pricing *",
+                    "Product / check mix *",
+                    "Total units open *",
+                }:
                     cell_classes.append("driver-estimate-cell")
             if str(col) in estimate_cols:
                 cell_classes.append("estimate-col")
@@ -956,7 +1226,12 @@ def _render_model_table(
     )
 
 
-def _render_driver_editor(ticker: str, periods: list[str], dfs: dict[str, Any]) -> None:
+def _render_driver_editor(
+    ticker: str,
+    periods: list[str],
+    dfs: dict[str, Any],
+    wide: pd.DataFrame,
+) -> None:
     """Render the driver table with explicit Update / Reset buttons.
 
     Edits in the ``st.data_editor`` only live in the widget's own state until the
@@ -976,28 +1251,55 @@ def _render_driver_editor(ticker: str, periods: list[str], dfs: dict[str, Any]) 
     reset_counter_key = f"{key}_reset_counter"
     counter = int(st.session_state.get(reset_counter_key, 0))
     widget_key = f"{key}_widget_v{counter}"
-    default = _default_driver_table(ticker, periods, dfs)
+    default = _default_driver_table(ticker, periods, dfs, wide=wide)
     if key not in st.session_state:
         st.session_state[key] = default
     applied = st.session_state[key]
 
-    editor = st.data_editor(
-        applied.drop(columns=["_key"]),
+    pct_key_set = {key for key, _ in _FORECAST_DRIVER_PCT}
+    pct_mask = applied["_key"].isin(pct_key_set)
+    pct_applied = applied.loc[pct_mask].reset_index(drop=True)
+    units_applied = applied.loc[applied["_key"] == "total_units_open"].reset_index(drop=True)
+
+    pct_col_config = {
+        "Driver": st.column_config.TextColumn("SSS driver (ppt)"),
+        **{
+            period: st.column_config.NumberColumn(period, format="%.1f%%", step=0.1)
+            for period in periods
+        },
+    }
+    units_col_config = {
+        "Driver": st.column_config.TextColumn("Unit driver"),
+        **{
+            period: st.column_config.NumberColumn(period, format="%d", step=1, min_value=0)
+            for period in periods
+        },
+    }
+
+    pct_edited = st.data_editor(
+        pct_applied.drop(columns=["_key"]),
         hide_index=True,
         use_container_width=True,
-        key=widget_key,
+        key=f"{widget_key}_pct",
         disabled=["Driver"],
-        column_config={
-            "Driver": st.column_config.TextColumn("Editable forecast driver"),
-            **{
-                period: st.column_config.NumberColumn(period, format="%.1f%%", step=0.1)
-                for period in periods
-            },
-        },
+        column_config=pct_col_config,
     )
-    edited_df = editor.merge(default[["Driver", "_key"]], on="Driver", how="left")[
-        ["Driver", "_key", *periods]
-    ]
+    units_edited = st.data_editor(
+        units_applied.drop(columns=["_key"]),
+        hide_index=True,
+        use_container_width=True,
+        key=f"{widget_key}_units",
+        disabled=["Driver"],
+        column_config=units_col_config,
+    )
+
+    pct_edited = pct_edited.merge(
+        pct_applied[["Driver", "_key"]], on="Driver", how="left"
+    )[["Driver", "_key", *periods]]
+    units_edited = units_edited.merge(
+        units_applied[["Driver", "_key"]], on="Driver", how="left"
+    )[["Driver", "_key", *periods]]
+    edited_df = pd.concat([pct_edited, units_edited], ignore_index=True)
 
     # Pending = editor's current visible values differ from the applied snapshot.
     # round() guards against float-display jitter; equal_nan keeps blank cells == blank.
@@ -1144,7 +1446,7 @@ showing weak near-term traffic but a path toward H2 stabilization.
     )
     st.subheader(f"{selected} forecast model")
     st.caption(_FORECAST_RATIONALE.get(selected, "Forecast assumptions are judgmental and can be changed in the editable driver table."))
-    _render_driver_editor(selected, forecast_periods, workbook_dfs)
+    _render_driver_editor(selected, forecast_periods, workbook_dfs, wide)
     actuals, forecast, _ = _full_model_for_ticker(
         wide,
         selected,
@@ -1162,9 +1464,9 @@ showing weak near-term traffic but a path toward H2 stabilization.
 
     st.subheader("Company notes")
     st.info(_NOTES.get(selected, "Definitions differ by company; the model keeps the same standardized rows across the peer set."))
-    st.caption(
-        "`menu_price` and `check_mix` are pulled from workbook CommonNames when present. Historical blanks mean the company did not have that metric mapped, not that the value is zero."
-    )
+
+    st.subheader("Estimate methodology")
+    st.info(_forecast_methodology_markdown(selected))
 
 
 main()

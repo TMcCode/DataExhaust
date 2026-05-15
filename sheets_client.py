@@ -103,7 +103,8 @@ def load_mlp_fast_casual_dataframes(
       - ``HistoricalValues`` — Ticker, Prd_nm, Metric, MetricValue, optional Footnotes
       - ``FiscalDates`` — Ticker, Prd_Nm, Prd_Strt, Prd_End, days, isEst
       - ``MetricNames`` — Ticker, Metric, CommonName
-      - ``SSSForecasts`` — optional forecast defaults: Ticker, Prd_Nm, CommonName, Value, Source, Footnote
+      - ``SSSForecasts`` — optional forecast defaults: Ticker, Prd_Nm, CommonName, Value, Source, Footnote.
+        CommonName values: ``traffic``, ``menu_price``, ``check_mix`` (ppt), ``total_units_open`` (unit count).
 
     Requires: ``pip install gspread pandas``
 
@@ -274,6 +275,7 @@ _MLP_PEER_PRICING_TRAFFIC_START_YEAR_Q = (2023, 1)
 _MLP_COMP_BASE_LAG_QTRS = {
     "CMG": 5,  # at least 13 full calendar months
     "CAVA": 4,  # open 365 days or longer
+    "BROS": 5,  # open 15 complete months or longer
     "SG": 5,  # open 15 complete months or longer
     "WING": 4,  # open at least 52 full weeks
     "SHAK": 8,  # open 24 full fiscal months or longer
