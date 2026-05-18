@@ -20,14 +20,13 @@ except ImportError:
 
 
 _TICKERS: tuple[str, ...] = ("CMG", "CAVA", "BROS", "WING", "SHAK", "SG")
-# Focus brands the editable bottom-section model is scoped to. The forecast summary
-# table and chart at the top still render all `_TICKERS` for cohort context.
-_MODELABLE_TICKERS: tuple[str, ...] = ("CMG", "BROS", "CAVA")
+# Tickers with the editable forecast model (driver tables + bridge). Same as cohort for now.
+_MODELABLE_TICKERS: tuple[str, ...] = _TICKERS
 _DEFAULT_TICKER = "CMG"
 _CHART_START_PRD = "2022Q1"
 _HISTORICAL_QUARTERS = 8
 _FORECAST_QUARTERS = 4
-_DRIVER_STATE_VERSION = "v6"
+_DRIVER_STATE_VERSION = "v7"
 # (common_name, editor label) — values live in SSSForecasts.CommonName and the driver table.
 _FORECAST_DRIVER_PCT: tuple[tuple[str, str], ...] = (
     ("traffic", "Traffic (%)"),
@@ -147,6 +146,9 @@ _RESTAURANT_REV_MEASURE: dict[str, str] = {
     "CMG": "Food and beverage revenue",
     "CAVA": "CAVA revenue",
     "BROS": "System-wide sales",
+    "WING": "System-wide sales",
+    "SHAK": "System-wide sales",
+    "SG": "Company revenue",
 }
 
 
@@ -221,9 +223,18 @@ _NOTES: dict[str, str] = {
         "- Estimated units entering comp base uses are approximated with openings from five quarters earlier.\n"
         "- **AUV (reported):** Cumulative YTD AUV is provided; quarters are weighted by systemwide sales cadence to get quarterly values."
     ),
-    "WING": "- Estimated units entering comp base uses restaurants open for at least 52 full weeks; approximated with openings from four quarters earlier.",
-    "SHAK": "- Estimated units entering comp base uses Company-operated Shacks open for 24 full fiscal months or longer; approximated with openings from eight quarters earlier.",
-    "SG": "- Estimated units entering comp base uses shops open for 15 complete months or longer as of the first day of the reporting period; approximated with openings from five quarters earlier.",
+    "WING": (
+        "- **Restaurant revenue metric used:** System-wide sales.\n"
+        "- Estimated units entering comp base uses restaurants open for at least 52 full weeks; approximated with openings from four quarters earlier."
+    ),
+    "SHAK": (
+        "- **Restaurant revenue metric used:** System-wide sales.\n"
+        "- Estimated units entering comp base uses Company-operated Shacks open for 24 full fiscal months or longer; approximated with openings from eight quarters earlier."
+    ),
+    "SG": (
+        "- **Restaurant revenue metric used:** Company revenue.\n"
+        "- Estimated units entering comp base uses shops open for 15 complete months or longer as of the first day of the reporting period; approximated with openings from five quarters earlier."
+    ),
 }
 _FORECAST_RATIONALE: dict[str, str] = {
     "CMG": (
@@ -283,6 +294,29 @@ def _workbook_dfs_with_forecasts(bundle: dict[str, Any]) -> dict[str, Any]:
     if not fallback.empty:
         dfs["sss_forecasts"] = fallback
     return dfs
+
+
+def _sss_forecasts_bundle_revision(dfs: dict[str, Any]) -> str:
+    """Fingerprint of bundled SSSForecasts; changes when snapshot/ETL refreshes sheet defaults."""
+    raw = dfs.get("sss_forecasts")
+    if not isinstance(raw, pd.DataFrame) or raw.empty:
+        return "empty"
+    cols = ("Ticker", "Prd_Nm", "CommonName", "Value")
+    if not set(cols).issubset(raw.columns):
+        return "incomplete"
+    sub = raw[list(cols)].fillna("").astype(str)
+    return str(pd.util.hash_pandas_object(sub, index=False).sum())
+
+
+def _invalidate_driver_state_if_forecasts_changed(dfs: dict[str, Any]) -> None:
+    """Drop cached driver tables when a new snapshot ships (e.g. total_units_open rows added)."""
+    rev_key = "sss_forecasts_bundle_revision"
+    rev = _sss_forecasts_bundle_revision(dfs)
+    if st.session_state.get(rev_key) != rev:
+        for k in list(st.session_state):
+            if k.startswith("sss_model_driver_editor_"):
+                del st.session_state[k]
+        st.session_state[rev_key] = rev
 
 
 def _prd_sort_key(value: object) -> int:
@@ -1372,6 +1406,7 @@ showing weak near-term traffic but a path toward H2 stabilization.
         st.warning("No `brand_period_wide` data is available for the forecast page.")
         st.stop()
     workbook_dfs = _workbook_dfs_with_forecasts(bundle)
+    _invalidate_driver_state_if_forecasts_changed(workbook_dfs)
     wide = _merge_extra_metrics(_clean_wide(raw_wide), workbook_dfs)
     tickers = _available_tickers(wide)
     if not tickers:
@@ -1411,32 +1446,19 @@ showing weak near-term traffic but a path toward H2 stabilization.
         st.line_chart(chart_df.pivot_table(index="Prd_Nm", columns="Ticker", values=_CHART_METRICS[metric][0]))
 
     st.markdown("---")
-    # Dropdown shows all cohort tickers; peers carry a 🔒 indicator and the
-    # editable model below is gated on `selected in _MODELABLE_TICKERS`.
     selected = st.selectbox(
         "Model company",
         options=tickers,
         index=tickers.index(selected),
         key="sss_model_company",
-        format_func=lambda t: t if t in _MODELABLE_TICKERS else f"{t} \U0001f512 peer (model not exposed)",
-        help="The editable forecast model is scoped to focus brands (CMG, BROS, CAVA). "
-        "Peer brands (WING, SHAK, SG) appear in the dropdown for visibility but their "
-        "models are not part of this case study.",
+        help="All cohort tickers use the same driver editor and forecast bridge.",
     )
 
     st.markdown('<div id="forecast-model"></div>', unsafe_allow_html=True)
 
     if selected not in _MODELABLE_TICKERS:
-        st.subheader(f"{selected} forecast model")
-        st.info(
-            f"**{selected}** is a peer brand in this cohort and appears in the summary "
-            "table and chart above for context. The editable forecast model is scoped "
-            "to the three focus brands per the case study brief — select **CMG**, "
-            "**BROS**, or **CAVA** to interact with the model."
-        )
-        st.subheader("Company notes")
-        st.info(_NOTES.get(selected, "Definitions differ by company; the model keeps the same standardized rows across the peer set."))
-        return
+        st.warning(f"No editable forecast model is configured for **{selected}**.")
+        st.stop()
 
     actuals, forecast, forecast_periods = _full_model_for_ticker(
         wide,
