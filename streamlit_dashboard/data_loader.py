@@ -101,7 +101,39 @@ def _strip_feature_tables_if_unwanted(
     return out
 
 
-def load_dashboard_data(
+def _local_snapshot_mtime() -> float:
+    """File mtime for cache invalidation when the repo snapshot is refreshed."""
+    try:
+        return _LOCAL_SNAPSHOT_PATH.stat().st_mtime
+    except OSError:
+        return -1.0
+
+
+def dataframe_revision(df: pd.DataFrame | None) -> str:
+    """Lightweight fingerprint for ``st.cache_data`` keys built from panel frames."""
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+        return "empty"
+    return f"{df.shape}_{pd.util.hash_pandas_object(df, index=True).sum()}"
+
+
+@st.cache_data(ttl=3600, show_spinner="Loading dashboard snapshot (GCS)…")
+def _cached_gcs_snapshot_bundle(gcs_snapshot_uri: str) -> dict[str, Any]:
+    snap = mlp_gcs_snapshot.download_bundle_gzip_pickle(gcs_snapshot_uri)
+    if snap is None:
+        raise ValueError(f"GCS snapshot missing or unreadable: {gcs_snapshot_uri}")
+    return snap
+
+
+@st.cache_data(ttl=3600, show_spinner="Loading dashboard snapshot (local)…")
+def _cached_local_snapshot_bundle(local_snapshot_mtime: float) -> dict[str, Any]:
+    del local_snapshot_mtime  # cache key only — file reread when mtime changes
+    snap = _try_local_snapshot()
+    if snap is None:
+        raise ValueError(f"Local snapshot missing: {_LOCAL_SNAPSHOT_PATH}")
+    return snap
+
+
+def _load_dashboard_data_uncached(
     spreadsheet_id_blank_means_default: str | None,
     macro_observation_start: str,
     include_commodity_csvs: bool,
@@ -145,6 +177,58 @@ def load_dashboard_data(
         "brand_period_wide": brand_wide,
         "feature_tables": feature_tables,
     }
+
+
+@st.cache_data(ttl=3600, show_spinner="Loading dashboard data…")
+def _cached_load_dashboard_data(
+    spreadsheet_id_blank_means_default: str,
+    macro_observation_start: str,
+    include_commodity_csvs: bool,
+    gcs_snapshot_uri: str,
+    local_snapshot_mtime: float,
+    include_feature_tables: bool,
+) -> dict[str, Any]:
+    """Cached wrapper: snapshot paths avoid repeated GCS download + unpickle on every rerun."""
+    uri = (gcs_snapshot_uri or "").strip()
+    if uri:
+        try:
+            snap = _cached_gcs_snapshot_bundle(uri)
+            return _strip_feature_tables_if_unwanted(snap, include_feature_tables)
+        except ValueError:
+            pass
+
+    if _LOCAL_SNAPSHOT_PATH.is_file():
+        try:
+            snap = _cached_local_snapshot_bundle(_local_snapshot_mtime())
+            return _strip_feature_tables_if_unwanted(snap, include_feature_tables)
+        except ValueError:
+            pass
+
+    return _load_dashboard_data_uncached(
+        spreadsheet_id_blank_means_default or None,
+        macro_observation_start,
+        include_commodity_csvs,
+        gcs_snapshot_uri=uri or None,
+        include_feature_tables=include_feature_tables,
+    )
+
+
+def load_dashboard_data(
+    spreadsheet_id_blank_means_default: str | None,
+    macro_observation_start: str,
+    include_commodity_csvs: bool,
+    gcs_snapshot_uri: str | None = None,
+    *,
+    include_feature_tables: bool = True,
+) -> dict[str, Any]:
+    return _cached_load_dashboard_data(
+        spreadsheet_id_blank_means_default or "",
+        macro_observation_start,
+        include_commodity_csvs,
+        gcs_snapshot_uri or "",
+        _local_snapshot_mtime(),
+        include_feature_tables,
+    )
 
 
 def get_dashboard_bundle_or_stop(*, include_feature_tables: bool = True) -> dict[str, Any]:

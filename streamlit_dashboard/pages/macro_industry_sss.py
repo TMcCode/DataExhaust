@@ -13,7 +13,7 @@ import pandas as pd
 import streamlit as st
 
 import macro_data
-from streamlit_dashboard.data_loader import get_dashboard_bundle_or_stop
+from streamlit_dashboard.data_loader import dataframe_revision, get_dashboard_bundle_or_stop
 from streamlit_dashboard.gtrends_loader import load_gtrends_monthly_csv
 from streamlit_dashboard.peer_gtrends_utils import (
     peer_pricing_by_calendar_quarter_end_from_wide,
@@ -188,6 +188,14 @@ _CONSUMER_3MMA_COLUMNS: frozenset[str] = frozenset(
         "opentable_us_seated_diners_online_reservations_yoy_pct",
     }
 )
+# Spread 3MMA needs a published monthly retail YoY for that month (Census/FRED); do not
+# extrapolate from CPI-only rows or repeat the last valid month when retail is missing.
+_CONSUMER_3MMA_REQUIRE_RAW_MONTH: frozenset[str] = frozenset(
+    {"real_restaurant_demand_sales_minus_faho_cpi_yoy_spread_pct"}
+)
+_CONSUMER_3MMA_MIN_PERIODS: dict[str, int] = {
+    "real_restaurant_demand_sales_minus_faho_cpi_yoy_spread_pct": 3,
+}
 _CONSUMER_DASHED_SERIES: frozenset[str] = frozenset({"Headline CPI"})
 _CONSUMER_METRIC_CAPTIONS: dict[str, str] = {
     "Restaurant Sales Growth": "Traffic, measured by sales growth - pricing growth, remains above flat.",
@@ -676,9 +684,13 @@ def _prepare_consumer_resilience_long(
         order.append(label)
         if col not in work.columns:
             continue
-        vals = pd.to_numeric(work[col], errors="coerce")
+        raw = pd.to_numeric(work[col], errors="coerce")
+        vals = raw
         if col in _CONSUMER_3MMA_COLUMNS:
-            vals = vals.rolling(window=3, min_periods=1).mean()
+            min_p = _CONSUMER_3MMA_MIN_PERIODS.get(col, 1)
+            vals = raw.rolling(window=3, min_periods=min_p).mean()
+            if col in _CONSUMER_3MMA_REQUIRE_RAW_MONTH:
+                vals = vals.where(raw.notna())
         for me, value in zip(work["month_end"], vals):
             if pd.notna(value):
                 rows.append({"month_end": me, "series": label, "value": float(value)})
@@ -690,6 +702,76 @@ def _prepare_consumer_resilience_long(
     present = list(dict.fromkeys(out["series"].astype(str).tolist()))
     order = [label for label in order if label in present]
     return out, order, str(meta["y_title"]), str(meta["value_format"])
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _cached_prepare_consumer_resilience_long(
+    monthly_rev: str,
+    metric_name: str,
+    monthly: pd.DataFrame,
+) -> tuple[pd.DataFrame, list[str], str, str] | None:
+    del monthly_rev
+    return _prepare_consumer_resilience_long(monthly, metric_name)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _cached_prepare_macro_input_yoy_long(
+    monthly_rev: str,
+    years: int,
+    monthly: pd.DataFrame,
+) -> tuple[pd.DataFrame, list[str]] | None:
+    del monthly_rev
+    return _prepare_macro_input_yoy_long(monthly, years=years)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _cached_prepare_peer_indices_long(
+    monthly_rev: str,
+    wide_rev: str,
+    fd_rev: str,
+    years: int,
+    monthly: pd.DataFrame,
+    brand_period_wide: pd.DataFrame,
+    fiscal_dates: pd.DataFrame,
+) -> tuple[pd.DataFrame, list[str]] | None:
+    del monthly_rev, wide_rev, fd_rev
+    return _prepare_peer_indices_long(
+        monthly, brand_period_wide, fiscal_dates, years=years
+    )
+
+
+@st.fragment
+def _consumer_resilience_metric_panel(side: str, macro_monthly: pd.DataFrame, *, default_metric: str) -> None:
+    """Rerun only this column when the consumer-metric dropdown changes."""
+    consumer_options = list(_CONSUMER_METRIC_OPTIONS)
+    monthly_rev = dataframe_revision(macro_monthly)
+    default_idx = (
+        consumer_options.index(default_metric) if default_metric in consumer_options else 0
+    )
+    picked = st.selectbox(
+        f"{side.title()} consumer metric",
+        options=consumer_options,
+        index=default_idx,
+        key=f"fc_consumer_{side}_metric_select",
+        label_visibility="collapsed",
+    )
+    prepared = _cached_prepare_consumer_resilience_long(monthly_rev, picked, macro_monthly)
+    if prepared is None:
+        st.caption(f"No data available for **{picked}**.")
+        return
+    cons_df, cons_order, cons_y, cons_fmt = prepared
+    ch = _consumer_resilience_chart(cons_df, cons_order, y_title=cons_y, value_format=cons_fmt)
+    if ch is not None:
+        st.altair_chart(ch, use_container_width=True)
+        st.markdown(
+            f"""
+<div class="fc-under-chart">
+<p class="fc-src">{_CONSUMER_METRIC_SOURCES.get(picked, "FRED")}</p>
+<p class="fc-cap">{_CONSUMER_METRIC_CAPTIONS.get(picked, "")}</p>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
 
 
 def _consumer_resilience_chart(
@@ -1217,9 +1299,15 @@ more selective, leaving brands with less room to push price without hurting dema
         '<div class="fc-macro-chart-spacer" style="height:1.35rem;" aria-hidden="true"></div>',
         unsafe_allow_html=True,
     )
+    monthly_rev = dataframe_revision(macro_monthly)
+    wide_rev = dataframe_revision(brand_wide)
+    fd_rev = dataframe_revision(fd)
+
     col_macro_yoy, col_macro_right = st.columns(2, gap="medium")
     with col_macro_yoy:
-        prepared = _prepare_macro_input_yoy_long(macro_monthly, years=_MACRO_YOY_CHART_YEARS)
+        prepared = _cached_prepare_macro_input_yoy_long(
+            monthly_rev, _MACRO_YOY_CHART_YEARS, macro_monthly
+        )
         if prepared is not None:
             long_df, legend_order = prepared
             long_df, legend_order = _append_peer_indexes_to_macro_long(
@@ -1276,8 +1364,14 @@ more selective, leaving brands with less room to push price without hurting dema
 """,
             unsafe_allow_html=True,
         )
-        prep_pi = _prepare_peer_indices_long(
-            macro_monthly, brand_wide, fd, years=_MACRO_YOY_CHART_YEARS
+        prep_pi = _cached_prepare_peer_indices_long(
+            monthly_rev,
+            wide_rev,
+            fd_rev,
+            _MACRO_YOY_CHART_YEARS,
+            macro_monthly,
+            brand_wide,
+            fd,
         )
         if prep_pi is None:
             st.caption(
@@ -1318,68 +1412,15 @@ San Francisco continues to recover from the post-COVID trough. The consumer is m
 does not point to a broader pullback in away-from-home spending. So, there could be an opportunity for fast casual brands that are able to earn positive attention. 
 """
     )
-    consumer_options = list(_CONSUMER_METRIC_OPTIONS)
     col_consumer_left, col_consumer_right = st.columns(2, gap="medium")
     with col_consumer_left:
-        picked_consumer_left = st.selectbox(
-            "Left consumer metric",
-            options=consumer_options,
-            index=consumer_options.index("Restaurant Sales Growth"),
-            key="fc_consumer_left_metric_select",
-            label_visibility="collapsed",
+        _consumer_resilience_metric_panel(
+            "left", macro_monthly, default_metric="Restaurant Sales Growth"
         )
-        prepared_consumer_left = _prepare_consumer_resilience_long(macro_monthly, picked_consumer_left)
-        if prepared_consumer_left is None:
-            st.caption(f"No data available for **{picked_consumer_left}**.")
-        else:
-            cons_df_l, cons_order_l, cons_y_l, cons_fmt_l = prepared_consumer_left
-            ch_cons_l = _consumer_resilience_chart(
-                cons_df_l,
-                cons_order_l,
-                y_title=cons_y_l,
-                value_format=cons_fmt_l,
-            )
-            if ch_cons_l is not None:
-                st.altair_chart(ch_cons_l, use_container_width=True)
-                st.markdown(
-                    f"""
-<div class="fc-under-chart">
-<p class="fc-src">{_CONSUMER_METRIC_SOURCES.get(picked_consumer_left, "FRED")}</p>
-<p class="fc-cap">{_CONSUMER_METRIC_CAPTIONS.get(picked_consumer_left, "")}</p>
-</div>
-""",
-                    unsafe_allow_html=True,
-                )
     with col_consumer_right:
-        picked_consumer_right = st.selectbox(
-            "Right consumer metric",
-            options=consumer_options,
-            index=consumer_options.index("OpenTable Seated Diners"),
-            key="fc_consumer_right_metric_select",
-            label_visibility="collapsed",
+        _consumer_resilience_metric_panel(
+            "right", macro_monthly, default_metric="OpenTable Seated Diners"
         )
-        prepared_consumer_right = _prepare_consumer_resilience_long(macro_monthly, picked_consumer_right)
-        if prepared_consumer_right is None:
-            st.caption(f"No data available for **{picked_consumer_right}**.")
-        else:
-            cons_df_r, cons_order_r, cons_y_r, cons_fmt_r = prepared_consumer_right
-            ch_cons_r = _consumer_resilience_chart(
-                cons_df_r,
-                cons_order_r,
-                y_title=cons_y_r,
-                value_format=cons_fmt_r,
-            )
-            if ch_cons_r is not None:
-                st.altair_chart(ch_cons_r, use_container_width=True)
-                st.markdown(
-                    f"""
-<div class="fc-under-chart">
-<p class="fc-src">{_CONSUMER_METRIC_SOURCES.get(picked_consumer_right, "FRED")}</p>
-<p class="fc-cap">{_CONSUMER_METRIC_CAPTIONS.get(picked_consumer_right, "")}</p>
-</div>
-""",
-                    unsafe_allow_html=True,
-                )
 
     st.markdown(
         """

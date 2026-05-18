@@ -11,7 +11,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 import sheets_client
-from streamlit_dashboard.data_loader import get_dashboard_bundle_or_stop
+from streamlit_dashboard.data_loader import dataframe_revision, get_dashboard_bundle_or_stop
 
 try:
     import altair as alt
@@ -626,7 +626,10 @@ def _driver_values(
     selected_ticker: str,
     dfs: dict[str, Any] | None = None,
     wide: pd.DataFrame | None = None,
+    driver_override: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
+    if driver_override is not None:
+        return driver_override.copy()
     if ticker != selected_ticker:
         return _default_driver_table(ticker, periods, dfs, wide=wide)
     key = f"sss_model_driver_editor_{_DRIVER_STATE_VERSION}_{ticker}_{'_'.join(periods)}"
@@ -781,9 +784,15 @@ def _forecast_frame(
     selected_ticker: str,
     dfs: dict[str, Any] | None = None,
     wide: pd.DataFrame | None = None,
+    driver_override: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     drivers = _driver_values(
-        ticker, periods, selected_ticker=selected_ticker, dfs=dfs, wide=wide
+        ticker,
+        periods,
+        selected_ticker=selected_ticker,
+        dfs=dfs,
+        wide=wide,
+        driver_override=driver_override,
     )
     hist_lookup = _period_lookup(actuals)
     rows: list[dict[str, Any]] = []
@@ -901,6 +910,7 @@ def _full_model_for_ticker(
     *,
     selected_ticker: str,
     dfs: dict[str, Any] | None = None,
+    driver_override: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, list[str]]:
     actuals = _ticker_actuals(wide, ticker)
     periods = _next_prds(actuals["Prd_Nm"].iloc[-1])
@@ -911,14 +921,49 @@ def _full_model_for_ticker(
         selected_ticker=selected_ticker,
         dfs=dfs,
         wide=wide,
+        driver_override=driver_override,
     )
     return actuals, forecast, periods
 
 
-def _all_ticker_chart_frame(wide: pd.DataFrame, selected_ticker: str, dfs: dict[str, Any]) -> pd.DataFrame:
+def _driver_editor_key(ticker: str, periods: list[str]) -> str:
+    return f"sss_model_driver_editor_{_DRIVER_STATE_VERSION}_{ticker}_{'_'.join(periods)}"
+
+
+def _driver_override_for_cache(
+    ticker: str,
+    periods: list[str],
+    *,
+    selected_ticker: str,
+) -> pd.DataFrame | None:
+    if ticker != selected_ticker:
+        return None
+    stored = st.session_state.get(_driver_editor_key(ticker, periods))
+    return stored.copy() if isinstance(stored, pd.DataFrame) else None
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _cached_all_ticker_chart_frame(
+    wide_rev: str,
+    forecasts_rev: str,
+    selected_ticker: str,
+    driver_rev: str,
+    wide: pd.DataFrame,
+    forecasts_df: pd.DataFrame,
+    driver_override: pd.DataFrame | None,
+) -> pd.DataFrame:
+    del wide_rev, forecasts_rev, driver_rev
+    dfs = {"sss_forecasts": forecasts_df}
     frames: list[pd.DataFrame] = []
     for ticker in _available_tickers(wide):
-        actuals, forecast, _ = _full_model_for_ticker(wide, ticker, selected_ticker=selected_ticker, dfs=dfs)
+        ov = driver_override if ticker == selected_ticker else None
+        actuals, forecast, _ = _full_model_for_ticker(
+            wide,
+            ticker,
+            selected_ticker=selected_ticker,
+            dfs=dfs,
+            driver_override=ov,
+        )
         hist = actuals[actuals["Prd_Nm"].map(_prd_sort_key) >= _prd_sort_key(_CHART_START_PRD)].copy()
         hist["Type"] = "Actual"
         connector = actuals.tail(1).copy()
@@ -929,6 +974,37 @@ def _all_ticker_chart_frame(wide: pd.DataFrame, selected_ticker: str, dfs: dict[
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
+
+
+def _all_ticker_chart_frame(
+    wide: pd.DataFrame,
+    selected_ticker: str,
+    dfs: dict[str, Any],
+    *,
+    driver_override: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    fc = dfs.get("sss_forecasts")
+    forecasts_df = fc if isinstance(fc, pd.DataFrame) else pd.DataFrame()
+    periods_key = ""
+    tickers = _available_tickers(wide)
+    if tickers:
+        actuals0 = _ticker_actuals(wide, selected_ticker)
+        if not actuals0.empty:
+            periods_key = "_".join(_next_prds(actuals0["Prd_Nm"].iloc[-1]))
+    driver_rev = (
+        dataframe_revision(driver_override)
+        if driver_override is not None
+        else "default"
+    )
+    return _cached_all_ticker_chart_frame(
+        dataframe_revision(wide),
+        _sss_forecasts_bundle_revision(dfs),
+        selected_ticker,
+        f"{selected_ticker}:{periods_key}:{driver_rev}",
+        wide,
+        forecasts_df,
+        driver_override,
+    )
 
 
 def _line_chart(df: pd.DataFrame, metric_label: str) -> Any:
@@ -962,21 +1038,65 @@ def _line_chart(df: pd.DataFrame, metric_label: str) -> Any:
     )
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def _cached_forecast_summary_table(
+    wide_rev: str,
+    forecasts_rev: str,
+    selected_ticker: str,
+    driver_rev: str,
+    tickers: tuple[str, ...],
+    wide: pd.DataFrame,
+    forecasts_df: pd.DataFrame,
+    driver_override: pd.DataFrame | None,
+) -> pd.DataFrame:
+    del wide_rev, forecasts_rev, driver_rev
+    dfs = {"sss_forecasts": forecasts_df}
+    row_labels = ["Last Period", "Current Period", "Period+1", "Period+2", "Period+3"]
+    rows: list[dict[str, str]] = [{"Period": label} for label in row_labels]
+    for ticker in tickers:
+        ov = driver_override if ticker == selected_ticker else None
+        actuals, forecast, _ = _full_model_for_ticker(
+            wide,
+            ticker,
+            selected_ticker=selected_ticker,
+            dfs=dfs,
+            driver_override=ov,
+        )
+        values = [actuals.iloc[-1].get("sss", float("nan")), *forecast["sss"].tolist()]
+        for row, value in zip(rows, values):
+            row[ticker] = _fmt(value, "sss")
+    return pd.DataFrame(rows)
+
+
 def _forecast_summary_table(
     wide: pd.DataFrame,
     tickers: tuple[str, ...],
     *,
     selected_ticker: str,
     dfs: dict[str, Any],
+    driver_override: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    row_labels = ["Last Period", "Current Period", "Period+1", "Period+2", "Period+3"]
-    rows: list[dict[str, str]] = [{"Period": label} for label in row_labels]
-    for ticker in tickers:
-        actuals, forecast, _ = _full_model_for_ticker(wide, ticker, selected_ticker=selected_ticker, dfs=dfs)
-        values = [actuals.iloc[-1].get("sss", float("nan")), *forecast["sss"].tolist()]
-        for row, value in zip(rows, values):
-            row[ticker] = _fmt(value, "sss")
-    return pd.DataFrame(rows)
+    fc = dfs.get("sss_forecasts")
+    forecasts_df = fc if isinstance(fc, pd.DataFrame) else pd.DataFrame()
+    periods_key = ""
+    actuals0 = _ticker_actuals(wide, selected_ticker)
+    if not actuals0.empty:
+        periods_key = "_".join(_next_prds(actuals0["Prd_Nm"].iloc[-1]))
+    driver_rev = (
+        dataframe_revision(driver_override)
+        if driver_override is not None
+        else "default"
+    )
+    return _cached_forecast_summary_table(
+        dataframe_revision(wide),
+        _sss_forecasts_bundle_revision(dfs),
+        selected_ticker,
+        f"{selected_ticker}:{periods_key}:{driver_rev}",
+        tuple(tickers),
+        wide,
+        forecasts_df,
+        driver_override,
+    )
 
 
 def _model_display_table(
@@ -1416,14 +1536,6 @@ showing weak near-term traffic but a path toward H2 stabilization.
     selected = str(st.session_state.get("sss_model_company", _DEFAULT_TICKER)).upper()
     if selected not in tickers:
         selected = _DEFAULT_TICKER if _DEFAULT_TICKER in tickers else tickers[0]
-    st.markdown("[Jump to the editable forecast model](#forecast-model)")
-    st.subheader("Forecast summary")
-    st.dataframe(
-        _forecast_summary_table(wide, tickers, selected_ticker=selected, dfs=workbook_dfs),
-        hide_index=True,
-        use_container_width=True,
-    )
-    metric = st.selectbox("Chart metric", options=list(_CHART_METRICS), index=0)
 
     if st.session_state.get("sss_model_last_ticker") != selected:
         for key in list(st.session_state):
@@ -1437,7 +1549,28 @@ showing weak near-term traffic but a path toward H2 stabilization.
         selected_ticker=selected,
         dfs=workbook_dfs,
     )
-    chart_df = _all_ticker_chart_frame(wide, selected, workbook_dfs)
+    driver_override = _driver_override_for_cache(
+        selected, forecast_periods, selected_ticker=selected
+    )
+
+    st.markdown("[Jump to the editable forecast model](#forecast-model)")
+    st.subheader("Forecast summary")
+    st.dataframe(
+        _forecast_summary_table(
+            wide,
+            tuple(tickers),
+            selected_ticker=selected,
+            dfs=workbook_dfs,
+            driver_override=driver_override,
+        ),
+        hide_index=True,
+        use_container_width=True,
+    )
+    metric = st.selectbox("Chart metric", options=list(_CHART_METRICS), index=0)
+
+    chart_df = _all_ticker_chart_frame(
+        wide, selected, workbook_dfs, driver_override=driver_override
+    )
     st.subheader(f"{metric} history and forecast")
     chart = _line_chart(chart_df, metric)
     if chart is not None:
