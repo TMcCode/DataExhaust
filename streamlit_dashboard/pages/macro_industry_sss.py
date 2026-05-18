@@ -13,7 +13,8 @@ import pandas as pd
 import streamlit as st
 
 import macro_data
-from streamlit_dashboard.data_loader import dataframe_revision, get_dashboard_bundle_or_stop
+from streamlit_dashboard.cache_keys import dataframe_revision
+from streamlit_dashboard.data_loader import get_dashboard_bundle_or_stop
 from streamlit_dashboard.gtrends_loader import load_gtrends_monthly_csv
 from streamlit_dashboard.peer_gtrends_utils import (
     peer_pricing_by_calendar_quarter_end_from_wide,
@@ -740,7 +741,12 @@ def _cached_prepare_peer_indices_long(
     )
 
 
-@st.fragment
+def _streamlit_fragment(fn):  # Streamlit >= 1.33; no-op on older runtimes
+    dec = getattr(st, "fragment", None)
+    return dec(fn) if dec is not None else fn
+
+
+@_streamlit_fragment
 def _consumer_resilience_metric_panel(side: str, macro_monthly: pd.DataFrame, *, default_metric: str) -> None:
     """Rerun only this column when the consumer-metric dropdown changes."""
     consumer_options = list(_CONSUMER_METRIC_OPTIONS)

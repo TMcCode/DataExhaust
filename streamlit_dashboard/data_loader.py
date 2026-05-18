@@ -23,6 +23,8 @@ import macro_data
 import mlp_gcs_snapshot
 import sheets_client
 
+from streamlit_dashboard.cache_keys import dataframe_revision
+
 # Dashboard default: enough history for ~15y charts without pulling full FRED history from 2000.
 _STREAMLIT_DEFAULT_MACRO_START = "2010-01-01"
 
@@ -107,13 +109,6 @@ def _local_snapshot_mtime() -> float:
         return _LOCAL_SNAPSHOT_PATH.stat().st_mtime
     except OSError:
         return -1.0
-
-
-def dataframe_revision(df: pd.DataFrame | None) -> str:
-    """Lightweight fingerprint for ``st.cache_data`` keys built from panel frames."""
-    if df is None or not isinstance(df, pd.DataFrame) or df.empty:
-        return "empty"
-    return f"{df.shape}_{pd.util.hash_pandas_object(df, index=True).sum()}"
 
 
 @st.cache_data(ttl=3600, show_spinner="Loading dashboard snapshot (GCS)…")

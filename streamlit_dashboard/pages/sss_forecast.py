@@ -11,7 +11,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 import sheets_client
-from streamlit_dashboard.data_loader import dataframe_revision, get_dashboard_bundle_or_stop
+from streamlit_dashboard.cache_keys import dataframe_revision
+from streamlit_dashboard.data_loader import get_dashboard_bundle_or_stop
 
 try:
     import altair as alt
